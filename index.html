@@ -153,37 +153,30 @@
         </header>
 
         <main class="flex-grow flex flex-col md:flex-row gap-2" style="min-height: 0;">
-            <!-- Left Column: Players -->
             <div id="players-and-log-container" class="flex-grow flex flex-col md:flex-row gap-2" style="min-height: 0;">
-                 <div class="md:w-3/5 w-full flex-shrink-0">
-                     <div id="players-grid" class="grid grid-cols-1 gap-2 content-start h-full overflow-y-auto"></div>
-                 </div>
-                 <!-- Right Column: Log -->
-                 <div class="md:w-2/5 w-full card p-2 flex flex-col" style="min-height: 150px;">
-                     <h3 class="text-center font-bold text-sm mb-2 flex-shrink-0 border-b border-gray-600 pb-1">ゲームログ</h3>
-                     <div id="game-log" class="flex-grow overflow-y-auto text-xs space-y-1"></div>
-                 </div>
+                <div class="md:w-3/5 w-full flex-shrink-0">
+                    <div id="players-grid" class="grid grid-cols-1 gap-2 content-start h-full overflow-y-auto"></div>
+                </div>
+                <div class="md:w-2/5 w-full card p-2 flex flex-col" style="min-height: 150px;">
+                    <h3 class="text-center font-bold text-sm mb-2 flex-shrink-0 border-b border-gray-600 pb-1">ゲームログ</h3>
+                    <div id="game-log" class="flex-grow overflow-y-auto text-xs space-y-1"></div>
+                </div>
             </div>
         </main>
         
-        <!-- Footer: My Info -->
         <footer id="my-info-area" class="card p-3 mt-auto flex-shrink-0">
             <div class="flex justify-between items-center">
                 <div class="flex-1 pr-2">
-                     <div class="flex items-center gap-2">
+                    <div class="flex items-center gap-2">
                         <h3 id="my-name" class="text-lg md:text-xl font-bold truncate"></h3>
                         <div id="my-status-icons" class="flex"></div>
-                     </div>
+                    </div>
                     <div id="my-hp-stars" class="flex items-center mt-1"></div>
-                </div>
-                <div id="my-actions" class="flex items-center gap-2 pl-2">
-                     <button id="shoot-self-btn" class="btn text-sm">自分を撃つ</button>
                 </div>
             </div>
         </footer>
     </div>
 
-    <!-- Lobby -->
     <div id="lobby" class="w-full h-full flex items-center justify-center p-4">
         <div class="w-full max-w-md card p-8 text-center">
             <h1 class="text-3xl pixel-font text-red-500 mb-6">BUCKSHOT ROULETTE</h1>
@@ -194,11 +187,11 @@
             </div>
             <div class="flex gap-2 justify-center mb-6"> <button id="add-player-btn" class="btn">追加</button> <button id="remove-player-btn" class="btn">削除</button> </div>
             <button id="start-game-btn" class="w-full p-3 btn btn-danger">ゲーム開始</button>
+            <button id="connect-ble-btn" class="w-full p-3 btn mt-4">コントローラー接続</button>
             <p id="lobby-error" class="text-red-400 mt-4"></p>
         </div>
     </div>
 
-    <!-- Modal -->
     <div id="modal" class="fixed inset-0 z-50 flex items-center justify-center hidden p-4">
         <div class="modal-backdrop fixed inset-0"></div>
         <div id="modal-card" class="card p-6 relative z-10 w-full max-w-md text-center max-h-full overflow-y-auto">
@@ -209,8 +202,12 @@
     </div>
 
     <script>
+        // --- グローバル変数 ---
+        let selectedTargetId = null;
         let gameState = {};
+        let bleCharacteristic;
 
+        // --- 定数 ---
         const ITEMS = {
             'saw': { name: 'ノコギリ', svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h16M8 8l8 8M8 16l8-8"/></svg>` },
             'magnifying-glass': { name: '虫眼鏡', svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>` },
@@ -224,6 +221,7 @@
         };
         const STAR_SVG = `<svg viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"></path></svg>`;
 
+        // --- UI要素の取得 ---
         const lobbyUI = document.getElementById('lobby');
         const gameContainerUI = document.getElementById('game-container');
         const gameLogUI = document.getElementById('game-log');
@@ -240,15 +238,65 @@
         const modalContentUI = document.getElementById('modal-content');
         const modalConfirmBtn = document.getElementById('modal-confirm-btn');
         const modalBackdrop = document.querySelector('.modal-backdrop');
+        const connectBleBtn = document.getElementById('connect-ble-btn');
 
+        // --- 初期化処理 ---
         window.onload = () => {
             addPlayerBtn.addEventListener('click', addPlayerInput);
             removePlayerBtn.addEventListener('click', removePlayerInput);
             startGameBtn.addEventListener('click', startGame);
             itemsBtn.addEventListener('click', showItemSelectionModal);
-            document.getElementById('shoot-self-btn').addEventListener('click', () => handleShoot(gameState.players[gameState.currentTurnPlayerIndex].id));
+            connectBleBtn.addEventListener('click', connectBLE);
         };
         
+        // --- Bluetooth関連 ---
+        async function connectBLE() {
+            const SERVICE_UUID = '4fafc201-1fb5-459e-8fcc-c5c9c331914b';
+            const CHARACTERISTIC_UUID = 'beb5483e-36e1-4688-b7f5-ea07361b26a8';
+
+            try {
+                console.log('BLEデバイスを検索中...');
+                const device = await navigator.bluetooth.requestDevice({
+                    filters: [{ services: [SERVICE_UUID] }],
+                });
+
+                console.log('デバイスに接続中...', device.name);
+                const server = await device.gatt.connect();
+                const service = await server.getPrimaryService(SERVICE_UUID);
+                bleCharacteristic = await service.getCharacteristic(CHARACTERISTIC_UUID);
+
+                await bleCharacteristic.startNotifications();
+                bleCharacteristic.addEventListener('characteristicvaluechanged', handleNotifications);
+
+                console.log('BLEコントローラー接続完了！');
+                connectBleBtn.textContent = '接続済み';
+                connectBleBtn.disabled = true;
+
+            } catch (error) {
+                console.error('BLE接続エラー:', error);
+                alert('BLE接続に失敗しました: ' + error);
+            }
+        }
+
+        function handleNotifications(event) {
+            const value = event.target.value;
+            const decoder = new TextDecoder('utf-8');
+            const command = decoder.decode(value);
+            console.log('受信コマンド:', command);
+
+            if (command === 'fire') {
+                if (selectedTargetId === null) {
+                    console.log('ターゲットが選択されていません');
+                    triggerScreenShake('soft');
+                    return;
+                }
+                console.log(`選択されたターゲット (ID: ${selectedTargetId}) を撃ちます`);
+                handleShoot(selectedTargetId);
+                selectedTargetId = null;
+            }
+        }
+        
+        // --- ゲームロジック ---
         function addLog(message, type = 'normal') {
             const logEntry = document.createElement('p');
             let colorClass = 'text-gray-400';
@@ -381,7 +429,7 @@
         }
 
         async function endTurn() {
-             let nextPlayerIndex = (gameState.currentTurnPlayerIndex + 1) % gameState.players.length;
+            let nextPlayerIndex = (gameState.currentTurnPlayerIndex + 1) % gameState.players.length;
             let loopedOnce = false;
 
             while (true) {
@@ -439,7 +487,7 @@
                     if (gameState.shotgun.chamber.length > 0) {
                         const ejectedShell = gameState.shotgun.chamber.shift();
                         const shellText = ejectedShell === 'live' ? '実弾' : '空砲';
-                         await showInfoModal('ビール使用', `弾を1つ排出した... (${shellText})`);
+                        await showInfoModal('ビール使用', `弾を1つ排出した... (${shellText})`);
                     } else {
                         await showInfoModal('ビール使用', '弾倉は空だった。');
                     }
@@ -452,7 +500,7 @@
                         await showInfoModal('期限切れ薬', 'ライフが2回復した！');
                     } else {
                         currentPlayer.hp--;
-                         await showInfoModal('期限切れ薬', 'ライフが1減少した...');
+                        await showInfoModal('期限切れ薬', 'ライフが1減少した...');
                     }
                     if (currentPlayer.hp <= 0) {
                         currentPlayer.hp = 0;
@@ -470,7 +518,7 @@
                     }
                     break;
                 case 'disposable-phone':
-                     if (gameState.shotgun.chamber.length > 1) {
+                    if (gameState.shotgun.chamber.length > 1) {
                         const randomIndex = Math.floor(Math.random() * gameState.shotgun.chamber.length);
                         const randomShell = gameState.shotgun.chamber[randomIndex];
                         const shellText = randomShell === 'live' ? '実弾' : '空砲';
@@ -495,7 +543,7 @@
         function handleTargetSelection(targetPlayerId) {
             const { itemKey } = gameState.itemTargetSelection;
             const targetPlayer = gameState.players.find(p => p.id === targetPlayerId);
-             const currentPlayer = gameState.players[gameState.currentTurnPlayerIndex];
+            const currentPlayer = gameState.players[gameState.currentTurnPlayerIndex];
 
             if (itemKey === 'handcuffs') {
                 targetPlayer.isHandcuffed = true;
@@ -528,44 +576,51 @@
             const playersGrid = document.getElementById('players-grid');
             playersGrid.innerHTML = '';
 
+            // 他のプレイヤーのカードを描画
             gameState.players.forEach(player => {
                 if (player.id === currentPlayer.id || !player.isAlive) return;
                 const playerCard = document.createElement('div');
                 playerCard.id = `player-card-${player.id}`;
-                playerCard.className = 'card p-2 space-y-1 player-card';
                 
+                let cardClasses = 'card p-2 space-y-1 player-card cursor-pointer transition-all';
+                if (player.id === selectedTargetId) {
+                    cardClasses += ' border-4 border-yellow-400';
+                }
+                playerCard.className = cardClasses;
+
                 let statusIconsHTML = '';
                 if(player.isHandcuffed) {
                     statusIconsHTML += `<span class="status-icon text-gray-400" title="手錠">${ITEMS.handcuffs.svg}</span>`;
                 }
-
                 playerCard.innerHTML = `
                     <div class="flex justify-between items-start">
                         <div>
                             <div class="flex items-center gap-2">
-                               <h3 class="text-base font-bold truncate">${player.name}</h3>
-                               <div class="flex">${statusIconsHTML}</div>
+                                <h3 class="text-base font-bold truncate">${player.name}</h3>
+                                <div class="flex">${statusIconsHTML}</div>
                             </div>
                             <div id="player-hp-${player.id}" class="flex items-center mt-1 hp-star">${generateHpStars(player.hp, player.maxHp)}</div>
                         </div>
                     </div>`;
-
-                const shootButton = document.createElement('button');
-                shootButton.className = 'w-full mt-2 btn btn-danger text-sm p-1';
-                shootButton.textContent = '撃つ';
-                shootButton.onclick = () => handleShoot(player.id);
-                playerCard.appendChild(shootButton);
                 
+                playerCard.onclick = () => selectTarget(player.id);
+
                 if (gameState.itemTargetSelection) {
                     playerCard.classList.add('targetable');
-                    shootButton.style.display = 'none';
                     playerCard.onclick = () => handleTargetSelection(player.id);
-                } else {
-                     playerCard.onclick = null;
                 }
                 playersGrid.appendChild(playerCard);
             });
-            
+
+            // 自分の情報エリアを描画
+            const myInfoArea = document.getElementById('my-info-area');
+            let myCardClasses = 'card p-3 mt-auto flex-shrink-0 cursor-pointer transition-all';
+            if (currentPlayer.id === selectedTargetId) {
+                myCardClasses += ' border-4 border-yellow-400';
+            }
+            myInfoArea.className = myCardClasses;
+            myInfoArea.onclick = () => selectTarget(currentPlayer.id);
+
             document.getElementById('my-name').textContent = `${currentPlayer.name} (あなたのターン)`;
             document.getElementById('my-hp-stars').innerHTML = generateHpStars(currentPlayer.hp, currentPlayer.maxHp);
             
@@ -577,9 +632,15 @@
             
             setActionButtonsDisabled(gameState.isActionLocked || !!gameState.itemTargetSelection);
         }
-        
+
+        function selectTarget(playerId) {
+            if (gameState.isActionLocked) return;
+            selectedTargetId = (selectedTargetId === playerId) ? null : playerId;
+            console.log(`ターゲット選択: Player ID ${selectedTargetId}`);
+            renderGame();
+        }
+
         function setActionButtonsDisabled(state) {
-            document.getElementById('shoot-self-btn').disabled = state;
             document.getElementById('items-btn').disabled = state;
             document.querySelectorAll('#players-grid button').forEach(btn => btn.disabled = state);
         }
@@ -612,9 +673,9 @@
             modalUI.classList.remove('hidden');
             modalUI.classList.add('flex');
             modalBackdrop.onclick = () => {
-                 modalUI.classList.add('hidden');
-                 modalConfirmBtn.style.display = 'block';
-                 modalCardUI.classList.remove('modal-lg');
+                modalUI.classList.add('hidden');
+                modalConfirmBtn.style.display = 'block';
+                modalCardUI.classList.remove('modal-lg');
             };
         }
 
@@ -651,8 +712,8 @@
                 modalContentUI.querySelector('p').textContent = 'シャッフル中...';
                 const shellElements = Array.from(display.children);
                 for (let i = 0; i < 3; i++) {
-                     shellElements.sort(() => Math.random() - 0.5).forEach(el => display.appendChild(el));
-                     await new Promise(res => setTimeout(res, 300));
+                    shellElements.sort(() => Math.random() - 0.5).forEach(el => display.appendChild(el));
+                    await new Promise(res => setTimeout(res, 300));
                 }
                 
                 gameState.shotgun.chamber.sort(() => Math.random() - 0.5);
@@ -765,4 +826,3 @@
     </script>
 </body>
 </html>
-
