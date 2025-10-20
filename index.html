@@ -14,6 +14,8 @@
             --border-color: #555;
             --text-color: #f0f0f0;
             --red-color: #d30000;
+            --blue-color: #0077ff;
+            --gray-color: #6b7280;
         }
 
         html, body {
@@ -50,45 +52,58 @@
             background-color: #6a6a6a;
             border-color: #999;
         }
-        .btn:disabled {
-            background-color: #333;
-            border-color: #555;
-            cursor: not-allowed;
-            opacity: 0.5;
-        }
         .btn-danger {
             background-color: #8b0000;
             border-color: #c00;
         }
-        .btn-danger:hover {
-            background-color: #b00;
-            border-color: #f00;
-        }
+        .btn-danger:hover { background-color: #b00; border-color: #f00; }
         .hp-bar-inner {
             background: linear-gradient(90deg, var(--red-color), #ff4500);
             transition: width 0.5s ease-in-out;
         }
-        .modal-backdrop {
-            background-color: rgba(0, 0, 0, 0.85);
-        }
+        .modal-backdrop { background-color: rgba(0, 0, 0, 0.85); }
 
-        /* 画面揺れのアニメーション */
-        @keyframes shake-hard {
-            0%, 100% { transform: translate(0, 0); }
-            10%, 30%, 50%, 70%, 90% { transform: translate(-8px, 8px) rotate(-2deg); }
-            20%, 40%, 60%, 80% { transform: translate(8px, -8px) rotate(2deg); }
+        /* シェル表示用スタイル */
+        #shell-display { min-height: 60px; }
+        .shell-block {
+            width: 25px;
+            height: 40px;
+            border-radius: 4px;
+            border: 2px solid rgba(0,0,0,0.5);
+            margin: 0 4px;
+            transition: background-color 0.5s, transform 0.5s;
         }
-        @keyframes shake-soft {
-            0%, 100% { transform: translate(0, 0); }
-            25% { transform: translate(-2px, 0px); }
-            75% { transform: translate(2px, 0px); }
+        .shell-block.live { background-color: var(--red-color); }
+        .shell-block.blank { background-color: var(--blue-color); }
+        .shell-block.unknown { background-color: var(--gray-color); }
+        
+        /* アニメーション */
+        @keyframes shell-in {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
         }
-        .shake-hard {
-            animation: shake-hard 0.4s cubic-bezier(.36,.07,.19,.97) both;
+        .shell-in-anim { animation: shell-in 0.3s ease-out forwards; }
+        
+        @keyframes shake-hard { 0%, 100% { transform: translate(0, 0); } 10%, 30%, 50%, 70%, 90% { transform: translate(-8px, 8px) rotate(-2deg); } 20%, 40%, 60%, 80% { transform: translate(8px, -8px) rotate(2deg); } }
+        @keyframes shake-soft { 0%, 100% { transform: translate(0, 0); } 25% { transform: translate(-2px, 0px); } 75% { transform: translate(2px, 0px); } }
+        .shake-hard { animation: shake-hard 0.4s cubic-bezier(.36,.07,.19,.97) both; }
+        .shake-soft { animation: shake-soft 0.3s cubic-bezier(.36,.07,.19,.97) both; }
+
+        .item-icon {
+            width: 50px;
+            height: 50px;
+            background-color: #4a4a4a;
+            border: 2px solid #777;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
-        .shake-soft {
-            animation: shake-soft 0.3s cubic-bezier(.36,.07,.19,.97) both;
-        }
+        .item-icon:hover { background-color: #6a6a6a; border-color: #999; }
+        .item-icon svg { width: 60%; height: 60%; }
+        .player-card.targetable { border-color: #ffcc00; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -97,39 +112,24 @@
         <!-- ヘッダー -->
         <header class="flex-shrink-0 flex justify-between items-center mb-2">
             <h1 class="text-lg md:text-2xl pixel-font text-red-500">BUCKSHOT ROULETTE</h1>
-            <div class="flex gap-2">
-                <button id="items-btn" class="btn text-xs">アイテム</button>
-                <button id="mute-btn" class="btn text-xs">Mute BGM</button>
-            </div>
+            <button id="mute-btn" class="btn text-xs">Mute BGM</button>
         </header>
 
         <!-- メインコンテンツエリア -->
-        <main class="flex-grow flex flex-col md:flex-row gap-2 relative" style="min-height: 0;">
-            <!-- 左半分 (プレイヤー + 中央情報) -->
-            <div class="flex-grow flex flex-col gap-2">
-                <!-- 他のプレイヤー -->
-                <div id="players-grid" class="flex-grow grid grid-cols-1 gap-2 content-start overflow-y-auto" style="min-height: 100px;">
-                    <!-- Player cards will be inserted here -->
-                </div>
+        <main class="flex-grow flex flex-col gap-2" style="min-height: 0;">
+            <!-- 他のプレイヤー -->
+            <div id="players-grid" class="flex-grow grid grid-cols-1 gap-2 content-start overflow-y-auto" style="min-height: 100px;"></div>
 
-                <!-- 中央情報 -->
-                <div class="flex-shrink-0 card p-3 flex flex-col items-center justify-center text-center">
-                     <h2 class="text-base font-bold">現在の弾倉</h2>
-                     <p class="text-lg">実弾 <span id="live-rounds" class="text-red-500 font-bold text-xl">0</span> / 空砲 <span id="blank-rounds" class="text-blue-400 font-bold text-xl">0</span></p>
-                </div>
-            </div>
-
-            <!-- 右上ログ (常に表示) -->
-            <div class="absolute top-0 right-0 w-48 h-1/2 md:h-full md:relative md:w-64 flex-shrink-0">
-                <div class="card p-2 flex flex-col w-full h-full">
-                    <h2 class="text-base font-bold mb-1 border-b border-gray-500 flex-shrink-0">ゲームログ</h2>
-                    <div id="game-log" class="flex-grow overflow-y-auto space-y-1 pr-1 text-xs"></div>
-                </div>
+            <!-- 中央情報 (シェル表示) -->
+            <div class="flex-shrink-0 card p-3 flex flex-col items-center justify-center text-center">
+                 <h2 id="shell-display-title" class="text-base font-bold">現在の弾倉</h2>
+                 <div id="shell-display" class="flex justify-center items-center mt-2"></div>
             </div>
         </main>
 
-        <!-- 自分の情報 (下部) -->
+        <!-- 自分の情報 & アイテム (下部) -->
         <footer id="my-info-area" class="card p-3 mt-2 flex-shrink-0">
+            <!-- プレイヤー情報 -->
             <div class="flex justify-between items-center">
                 <div class="flex-1 pr-2">
                     <h3 id="my-name" class="text-lg md:text-xl font-bold truncate"></h3>
@@ -141,21 +141,23 @@
                      <button id="shoot-self-btn" class="btn text-sm">自分を撃つ</button>
                 </div>
             </div>
+            <!-- アイテムバー -->
+            <div class="border-t border-gray-600 mt-3 pt-3">
+                 <p class="text-center text-xs text-gray-400 mb-2">アイテムを使用</p>
+                 <div id="item-bar" class="flex justify-center gap-2 flex-wrap"></div>
+            </div>
         </footer>
     </div>
 
     <!-- ロビー画面 -->
     <div id="lobby" class="w-full max-w-md card p-8 text-center">
-        <h1 class="text-3xl pixel-font text-red-500 mb-6">BUCKSHOT ROULETTE</h1>
+         <h1 class="text-3xl pixel-font text-red-500 mb-6">BUCKSHOT ROULETTE</h1>
         <p class="mb-4">プレイヤーを追加 (2~4人)</p>
         <div id="player-inputs" class="space-y-2 mb-4">
             <input type="text" placeholder="プレイヤー1の名前" class="player-name-input w-full p-2 rounded bg-gray-700 border border-gray-500 focus:outline-none focus:ring-2 focus:ring-red-500">
             <input type="text" placeholder="プレイヤー2の名前" class="player-name-input w-full p-2 rounded bg-gray-700 border border-gray-500 focus:outline-none focus:ring-2 focus:ring-red-500">
         </div>
-        <div class="flex gap-2 justify-center mb-6">
-            <button id="add-player-btn" class="btn">追加</button>
-            <button id="remove-player-btn" class="btn">削除</button>
-        </div>
+        <div class="flex gap-2 justify-center mb-6"> <button id="add-player-btn" class="btn">追加</button> <button id="remove-player-btn" class="btn">削除</button> </div>
         <button id="start-game-btn" class="w-full p-3 btn btn-danger">ゲーム開始</button>
         <p id="lobby-error" class="text-red-400 mt-4"></p>
     </div>
@@ -166,33 +168,21 @@
         <div id="modal-card" class="card p-6 relative z-10 w-full max-w-md text-center max-h-full overflow-y-auto">
             <h3 id="modal-title" class="text-2xl font-bold mb-4"></h3>
             <div id="modal-content"></div>
-            <div id="modal-actions" class="mt-6 flex justify-center space-x-2">
-                <button id="modal-confirm-btn" class="p-3 btn btn-danger">OK</button>
-            </div>
+            <div id="modal-actions" class="mt-6 flex justify-center space-x-2"> <button id="modal-confirm-btn" class="p-3 btn btn-danger">OK</button> </div>
         </div>
     </div>
 
     <script>
-        // --- グローバル変数 ---
         let gameState = {};
 
-        // ★変更点: アイテム定義を効果説明のみに変更
         const ITEMS = {
-            'saw': { name: 'ノコギリ', description: '使用したターンのみ、実包のダメージが2になる。' },
-            'magnifying-glass': { name: '虫眼鏡', description: '次に装弾されている弾を確認できる。' },
-            'cigarette': { name: 'タバコ', description: '自分のライフを1回復する。' },
-            'handcuffs': { name: '手錠', description: '敵を1ターン拘束する。' },
-            'beer': { name: 'ビール', description: 'ターン消費せずに弾を1つ消費する。' },
-            'expired-medicine': { name: '期限切れ薬', description: '50%でライフを2回復、50%で1喪失する。' },
-            'adrenaline': { name: 'アドレナリン', description: '相手のアイテムを1つ盗み、即時使用する。' },
-            'inverter': { name: 'インバータ', description: '弾倉内の空包と実包を入れ替える。' },
-            'disposable-phone': { name: '使い捨て携帯', description: 'ランダムな1発が実包か空砲か教えてくれる。' },
+            'saw': { name: 'ノコギリ', svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h16M8 8l8 8M8 16l8-8"/></svg>` },
+            'magnifying-glass': { name: '虫眼鏡', svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>` },
+            'cigarette': { name: 'タバコ', svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10H6"/><path d="M18 6H6"/><path d="M12 10v10"/><path d="M12 2v2"/></svg>` },
+            'handcuffs': { name: '手錠', svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 9a3 3 0 01-3-3V5a3 3 0 013-3h1a3 3 0 013 3v1"/><path d="M16 9a3 3 0 003-3V5a3 3 0 00-3-3h-1a3 3 0 00-3 3v1"/><path d="M8 15a3 3 0 00-3 3v1a3 3 0 003 3h1a3 3 0 003-3v-1"/><path d="M16 15a3 3 0 013 3v1a3 3 0 01-3 3h-1a3 3 0 01-3-3v-1"/><path d="M12 6v9"/></svg>` },
+            'beer': { name: 'ビール', svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2h8v2H8z"/><path d="M6 4h12v16a2 2 0 01-2 2H8a2 2 0 01-2-2V4z"/><path d="M12 8v8"/><path d="M9 12h6"/></svg>` },
         };
 
-        // --- サウンド管理 (変更なし) ---
-        const audioManager = { /* ... 省略 ... */ };
-
-        // --- UI要素 ---
         const lobbyUI = document.getElementById('lobby');
         const gameContainerUI = document.getElementById('game-container');
         const addPlayerBtn = document.getElementById('add-player-btn');
@@ -201,227 +191,229 @@
         const playerInputsUI = document.getElementById('player-inputs');
         const lobbyErrorUI = document.getElementById('lobby-error');
         const muteBtn = document.getElementById('mute-btn');
-        const itemsBtn = document.getElementById('items-btn');
-        
         const modalUI = document.getElementById('modal');
         const modalTitleUI = document.getElementById('modal-title');
         const modalContentUI = document.getElementById('modal-content');
         const modalConfirmBtn = document.getElementById('modal-confirm-btn');
         const modalBackdrop = document.querySelector('.modal-backdrop');
 
-        // --- 初期化 ---
         window.onload = () => {
             addPlayerBtn.addEventListener('click', addPlayerInput);
             removePlayerBtn.addEventListener('click', removePlayerInput);
             startGameBtn.addEventListener('click', startGame);
-            muteBtn.addEventListener('click', () => audioManager.toggleBgm());
-            itemsBtn.addEventListener('click', showAllItems);
-            // audioManager.init(); // 音声ファイルがないのでコメントアウト
         };
-        
-        // ★新規: アイテム一覧表示機能
-        function showAllItems() {
-            let contentHtml = '<div class="space-y-3 text-left">';
-            for (const key in ITEMS) {
-                const item = ITEMS[key];
-                contentHtml += `<div><h4 class="font-bold text-red-400">${item.name}</h4><p class="text-sm text-gray-300">${item.description}</p></div>`;
-            }
-            contentHtml += '</div>';
-            showModal('アイテム一覧', contentHtml, () => modalUI.classList.add('hidden'));
-        }
 
-        // --- ロビー関連の関数 (変更なし) ---
-        function addPlayerInput() { /* ... */ }
-        function removePlayerInput() { /* ... */ }
-        function updatePlayerButtons() { /* ... */ }
-
-        // --- ゲーム開始 ---
         function startGame() {
             const playerInputs = document.querySelectorAll('.player-name-input');
             const playerNames = Array.from(playerInputs).map(input => input.value.trim()).filter(name => name);
-            
             if (playerNames.length < 2) { lobbyErrorUI.textContent = '少なくとも2人のプレイヤー名を入力してください。'; return; }
             if (new Set(playerNames).size !== playerNames.length) { lobbyErrorUI.textContent = 'プレイヤー名は重複しないようにしてください。'; return; }
 
-            // ★変更点: gameStateからアイテム関連を削除
             gameState = {
-                players: playerNames.map((name, index) => ({ id: index, name: name, hp: 4, maxHp: 4, isAlive: true })),
+                players: playerNames.map((name, index) => ({ id: index, name: name, hp: 4, maxHp: 4, isAlive: true, usedSaw: false, isHandcuffed: false })),
                 gameState: 'playing',
                 currentTurnPlayerIndex: 0,
-                shotgun: { liveRounds: 0, blankRounds: 0, chamber: [] },
-                log: [`ゲーム開始！ 参加者: ${playerNames.join(', ')}`],
+                shotgun: { chamber: [] },
+                itemTargetSelection: null,
             };
 
             lobbyUI.classList.add('hidden');
             gameContainerUI.classList.remove('hidden');
-            
-            // audioManager.play('bgm');
             startRound();
         }
 
-        // --- ゲーム進行の関数 ---
         function startRound() {
-            addLogEntry('--- 新ラウンド開始 ---');
-
             const liveRounds = Math.ceil(Math.random() * 3) + 1;
             const blankRounds = Math.ceil(Math.random() * 3) + 1;
-            
             let chamber = Array(liveRounds).fill('live').concat(Array(blankRounds).fill('blank'));
             chamber.sort(() => Math.random() - 0.5);
+            gameState.shotgun = { chamber };
+            gameState.players.forEach(p => { p.usedSaw = false; });
+            displayAndScrambleShells();
+        }
 
-            gameState.shotgun = { liveRounds, blankRounds, chamber };
+        async function displayAndScrambleShells() {
+            const display = document.getElementById('shell-display');
+            const title = document.getElementById('shell-display-title');
+            display.innerHTML = '';
+            title.textContent = '弾倉に装填中...';
             
-            addLogEntry(`弾倉に装填: 実弾 ${liveRounds}, 空砲 ${blankRounds}`);
+            const shells = [...gameState.shotgun.chamber];
+            shells.forEach((shellType, i) => {
+                const block = document.createElement('div');
+                block.className = `shell-block ${shellType}`;
+                block.style.animationDelay = `${i * 100}ms`;
+                block.classList.add('shell-in-anim');
+                display.appendChild(block);
+            });
 
+            await new Promise(res => setTimeout(res, 4000));
+
+            title.textContent = '現在の弾倉';
+            Array.from(display.children).forEach(child => {
+                child.classList.remove('live', 'blank');
+                child.classList.add('unknown');
+                child.style.transform = `translateX(${(Math.random() - 0.5) * 20}px) rotate(${(Math.random() - 0.5) * 30}deg)`;
+            });
+
+            await new Promise(res => setTimeout(res, 1000));
             showTurnTransition();
         }
 
         function handleShoot(targetPlayerId) {
-            if (gameState.shotgun.chamber.length === 0) return;
-
+            if (gameState.shotgun.chamber.length === 0 || gameState.itemTargetSelection) return;
             const currentPlayer = gameState.players[gameState.currentTurnPlayerIndex];
             const targetPlayer = gameState.players.find(p => p.id === targetPlayerId);
             const shell = gameState.shotgun.chamber.shift();
             const isLive = shell === 'live';
-            
-            let logMessage = `${currentPlayer.name}が${targetPlayer.id === currentPlayer.id ? '自分' : targetPlayer.name}を撃った...`;
 
             if (isLive) {
-                // audioManager.play('shoot_live');
                 triggerScreenShake('hard');
-                const damage = 1; // ノコギリがないのでダメージは1で固定
-                logMessage += ` 実弾！ ${damage}ダメージ！`;
+                const damage = currentPlayer.usedSaw ? 2 : 1;
                 targetPlayer.hp -= damage;
                 if (targetPlayer.hp <= 0) {
                     targetPlayer.hp = 0;
                     targetPlayer.isAlive = false;
-                    logMessage += ` ${targetPlayer.name}は倒れた。`;
                 }
+                currentPlayer.usedSaw = false;
                 endTurn();
             } else {
-                // audioManager.play('shoot_blank');
                 triggerScreenShake('soft');
-                logMessage += ' 空砲だった。';
                 if (targetPlayer.id === currentPlayer.id) {
-                    logMessage += ' ターンは継続する。';
-                    // ターンを継続するのでendTurn()は呼ばない
+                    renderGame();
                 } else {
                     endTurn();
                 }
             }
-            
-            addLogEntry(logMessage);
-
-            gameState.shotgun.liveRounds = gameState.shotgun.chamber.filter(s => s === 'live').length;
-            gameState.shotgun.blankRounds = gameState.shotgun.chamber.length - gameState.shotgun.liveRounds;
-
             if (checkGameOver()) { renderGame(); return; }
-
             if (gameState.shotgun.chamber.length === 0) {
-                addLogEntry('弾切れです。');
-                renderGame(); // 弾切れ表示
-                setTimeout(startRound, 2000);
-            } else {
                 renderGame();
+                setTimeout(startRound, 2000);
             }
         }
 
         function endTurn() {
             let nextPlayerIndex = (gameState.currentTurnPlayerIndex + 1) % gameState.players.length;
-            
-            // 生きている次のプレイヤーを探す
-            while (!gameState.players[nextPlayerIndex].isAlive) {
-                nextPlayerIndex = (nextPlayerIndex + 1) % gameState.players.length;
+            while(true) {
+                const nextPlayer = gameState.players[nextPlayerIndex];
+                if (nextPlayer.isAlive) {
+                    if (nextPlayer.isHandcuffed) {
+                        nextPlayer.isHandcuffed = false;
+                        nextPlayerIndex = (nextPlayerIndex + 1) % gameState.players.length;
+                    } else {
+                        break;
+                    }
+                } else {
+                    nextPlayerIndex = (nextPlayerIndex + 1) % gameState.players.length;
+                }
             }
             gameState.currentTurnPlayerIndex = nextPlayerIndex;
-            
-            if (!checkGameOver()) {
-                showTurnTransition();
+            if (!checkGameOver()) { showTurnTransition(); }
+        }
+
+        function useItem(itemKey) {
+            const currentPlayer = gameState.players[gameState.currentTurnPlayerIndex];
+            if (gameState.itemTargetSelection) return;
+
+            switch(itemKey) {
+                case 'saw':
+                    currentPlayer.usedSaw = true;
+                    showModal('ノコギリ使用', '次の実弾ダメージが2になります。', () => modalUI.classList.add('hidden'));
+                    break;
+                case 'magnifying-glass':
+                    const nextShell = gameState.shotgun.chamber[0] || '空';
+                    const shellText = nextShell === 'live' ? '実弾' : (nextShell === 'blank' ? '空砲' : 'ありません');
+                    showModal('虫眼鏡使用', `次の弾は ${shellText} です。`, () => modalUI.classList.add('hidden'));
+                    break;
+                case 'cigarette':
+                    if (currentPlayer.hp < currentPlayer.maxHp) currentPlayer.hp++;
+                    renderGame();
+                    break;
+                case 'handcuffs':
+                    gameState.itemTargetSelection = { itemKey: 'handcuffs' };
+                    renderGame();
+                    break;
+                case 'beer':
+                    if (gameState.shotgun.chamber.length > 0) gameState.shotgun.chamber.shift();
+                    renderGame();
+                    break;
             }
         }
         
+        function handleTargetSelection(targetPlayerId) {
+            const { itemKey } = gameState.itemTargetSelection;
+            const targetPlayer = gameState.players.find(p => p.id === targetPlayerId);
+
+            if (itemKey === 'handcuffs') {
+                targetPlayer.isHandcuffed = true;
+            }
+
+            gameState.itemTargetSelection = null;
+            renderGame();
+        }
+
         function checkGameOver() {
             const alivePlayers = gameState.players.filter(p => p.isAlive);
             if (alivePlayers.length <= 1) {
                 gameState.gameState = 'finished';
                 const winner = alivePlayers[0];
-                addLogEntry(`--- ゲーム終了 ---`);
                 const title = winner ? `${winner.name}の勝利！` : '引き分け！';
                 const content = winner ? 'おめでとうございます！' : '勝者はいませんでした。';
-                addLogEntry(title);
                 showModal(title, content, () => { window.location.reload(); });
                 return true;
             }
             return false;
         }
 
-        function addLogEntry(message) {
-            gameState.log.push(message);
-            if (gameState.log.length > 50) gameState.log.shift();
-            renderLog();
-        }
-        
-        // --- 描画関数 ---
         function renderGame() {
+            if (gameState.gameState === 'finished') return;
             const currentPlayer = gameState.players[gameState.currentTurnPlayerIndex];
             const playersGrid = document.getElementById('players-grid');
             playersGrid.innerHTML = '';
-            
-            // 他のプレイヤーの表示
+
             gameState.players.forEach(player => {
                 if (player.id === currentPlayer.id || !player.isAlive) return;
-
                 const playerCard = document.createElement('div');
-                playerCard.className = `card p-2 space-y-1`;
+                playerCard.className = 'card p-2 space-y-1 player-card';
                 const hpPercentage = (player.hp / player.maxHp) * 100;
 
-                playerCard.innerHTML = `
-                    <h3 class="text-base font-bold truncate">${player.name}</h3>
+                playerCard.innerHTML = `<h3 class="text-base font-bold truncate">${player.name}</h3>
                     <div class="w-full bg-gray-600 rounded-full h-3">
                         <div class="hp-bar-inner h-3 rounded-full" style="width: ${hpPercentage}%"></div>
-                    </div>
-                `;
+                    </div>`;
 
-                const shootButton = document.createElement('button');
-                shootButton.className = 'w-full mt-2 btn btn-danger text-sm p-1';
-                shootButton.textContent = '撃つ';
-                shootButton.onclick = () => handleShoot(player.id);
-                playerCard.appendChild(shootButton);
-                
+                if (gameState.itemTargetSelection) {
+                    playerCard.classList.add('targetable');
+                    playerCard.onclick = () => handleTargetSelection(player.id);
+                } else {
+                    const shootButton = document.createElement('button');
+                    shootButton.className = 'w-full mt-2 btn btn-danger text-sm p-1';
+                    shootButton.textContent = '撃つ';
+                    shootButton.onclick = () => handleShoot(player.id);
+                    playerCard.appendChild(shootButton);
+                }
                 playersGrid.appendChild(playerCard);
             });
 
-            // 自分の情報の表示
             document.getElementById('my-name').textContent = `${currentPlayer.name} (あなたのターン)`;
             document.getElementById('my-hp-bar').style.width = `${(currentPlayer.hp / currentPlayer.maxHp) * 100}%`;
             document.getElementById('shoot-self-btn').onclick = () => handleShoot(currentPlayer.id);
+            document.getElementById('shoot-self-btn').disabled = !!gameState.itemTargetSelection;
 
-            // 全体情報
-            document.getElementById('live-rounds').textContent = gameState.shotgun.liveRounds;
-            document.getElementById('blank-rounds').textContent = gameState.shotgun.blankRounds;
-
-            renderLog();
+            const itemBar = document.getElementById('item-bar');
+            itemBar.innerHTML = '';
+            Object.keys(ITEMS).forEach(key => {
+                const item = ITEMS[key];
+                const button = document.createElement('button');
+                button.className = 'item-icon';
+                button.title = item.name;
+                button.innerHTML = item.svg;
+                button.onclick = () => useItem(key);
+                itemBar.appendChild(button);
+            });
         }
         
-        // ★新規: ログ専用の描画関数
-        function renderLog(){
-            const gameLog = document.getElementById('game-log');
-            if (gameLog) {
-                gameLog.innerHTML = gameState.log.map(entry => `<div class="p-1">${entry}</div>`).join('');
-                gameLog.scrollTop = gameLog.scrollHeight;
-            }
-        }
-
-        function triggerScreenShake(intensity) { /* ... */ }
-        function showTurnTransition() { /* ... */ }
-        function showModal(title, content, onConfirm) { /* ... */ }
-
-        // --- 関数の実装 (省略されている部分) ---
-        // (省略された関数は以前のコードと同じです)
-        audioManager.init = function() {}; // No sounds for now
-        audioManager.play = function(name) {};
-        audioManager.toggleBgm = function() {};
-        addPlayerInput = function() {
+        function addPlayerInput() {
             const inputs = playerInputsUI.getElementsByTagName('input');
             if (inputs.length < 4) {
                 const newInput = document.createElement('input');
@@ -431,45 +423,38 @@
                 playerInputsUI.appendChild(newInput);
             }
             updatePlayerButtons();
-        };
-        removePlayerInput = function() {
+        }
+        function removePlayerInput() {
             const inputs = playerInputsUI.getElementsByTagName('input');
-            if (inputs.length > 2) {
-                playerInputsUI.removeChild(inputs[inputs.length - 1]);
-            }
+            if (inputs.length > 2) playerInputsUI.removeChild(inputs[inputs.length - 1]);
             updatePlayerButtons();
-        };
-        updatePlayerButtons = function() {
+        }
+        function updatePlayerButtons() {
             const inputs = playerInputsUI.getElementsByTagName('input');
             addPlayerBtn.disabled = inputs.length >= 4;
             removePlayerBtn.disabled = inputs.length <= 2;
-        };
-        triggerScreenShake = function(intensity) {
+        }
+        function triggerScreenShake(intensity) {
             const className = intensity === 'hard' ? 'shake-hard' : 'shake-soft';
             document.body.classList.remove('shake-hard', 'shake-soft');
             void document.body.offsetWidth;
             document.body.classList.add(className);
-            setTimeout(() => {
-                document.body.classList.remove(className);
-            }, intensity === 'hard' ? 400 : 300);
-        };
-        showTurnTransition = function() {
+            setTimeout(() => { document.body.classList.remove(className); }, intensity === 'hard' ? 400 : 300);
+        }
+        function showTurnTransition() {
             const currentPlayer = gameState.players[gameState.currentTurnPlayerIndex];
             showModal(`${currentPlayer.name} のターン`, `スマートフォンを ${currentPlayer.name} さんに渡してください。`,
-                () => {
-                    modalUI.classList.add('hidden');
-                    renderGame();
-                }
+                () => { modalUI.classList.add('hidden'); renderGame(); }
             );
-        };
-        showModal = function(title, content, onConfirm) {
+        }
+        function showModal(title, content, onConfirm) {
             modalTitleUI.textContent = title;
-            modalContentUI.innerHTML = typeof content === 'string' ? `<p>${content}</p>` : content;
+            modalContentUI.innerHTML = `<p>${content}</p>`;
             modalConfirmBtn.onclick = onConfirm;
             modalUI.classList.remove('hidden');
             modalUI.classList.add('flex');
-            modalBackdrop.onclick = () => modalUI.classList.add('hidden'); // 背景クリックで閉じる
-        };
+            modalBackdrop.onclick = () => modalUI.classList.add('hidden');
+        }
     </script>
 </body>
 </html>
