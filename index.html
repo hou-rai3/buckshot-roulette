@@ -2,14 +2,18 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Buckshot Roulette (Offline)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=DotGothic16&family=Press+Start+2P&display=swap');
+        
+        /* 基本設定: 画面全体を使い、スクロールを禁止 */
         html, body {
             height: 100%;
-            overflow: hidden; /* スクロールを禁止 */
+            width: 100%;
+            overflow: hidden;
+            position: fixed; /* iOSでのアドレスバー問題を一部緩和 */
         }
         body {
             font-family: 'DotGothic16', sans-serif;
@@ -36,6 +40,7 @@
             padding: 0.75rem 1.5rem;
             color: white;
             font-weight: bold;
+            -webkit-tap-highlight-color: transparent; /* スマホでのタップ時のハイライトを無効化 */
         }
         .btn:hover {
             background-color: #6a6a6a;
@@ -76,12 +81,15 @@
         .modal-backdrop {
             background-color: rgba(0, 0, 0, 0.85);
         }
+
+        /* ★変更点: #game-container が常に画面全体を占めるように設定 */
         #game-container {
             width: 100%;
             height: 100%;
             display: flex;
             flex-direction: column;
         }
+
         /* 画面揺れのアニメーション */
         @keyframes shake-hard {
             0%, 100% { transform: translate(0, 0); }
@@ -103,46 +111,47 @@
 </head>
 <body>
 
-    <!-- ゲーム画面 -->
-    <div id="game-container" class="max-w-7xl mx-auto p-2 hidden">
-        <header class="text-center mb-2 flex justify-between items-center">
-            <h1 class="text-2xl md:text-4xl pixel-font text-red-500">BUCKSHOT ROULETTE</h1>
-            <button id="mute-btn" class="btn text-sm p-2">Mute BGM</button>
+    <!-- ★変更点: max-w-7xl と mx-auto を削除し、常に全幅表示に -->
+    <div id="game-container" class="p-2 hidden">
+        <header class="text-center mb-2 flex justify-between items-center flex-shrink-0">
+            <h1 class="text-xl md:text-3xl pixel-font text-red-500">BUCKSHOT ROULETTE</h1>
+            <button id="mute-btn" class="btn text-xs p-2">Mute BGM</button>
         </header>
 
+        <!-- ★変更点: min-height: 0 を設定し、flex-growが正しく機能するようにする -->
         <div class="flex-grow grid grid-cols-1 md:grid-cols-4 gap-2" style="min-height: 0;">
             <!-- プレイヤー一覧 (左/上) -->
-            <div id="players-grid" class="md:col-span-1 grid grid-cols-2 md:grid-cols-1 gap-2"></div>
+            <div id="players-grid" class="md:col-span-1 grid grid-cols-2 md:grid-cols-1 gap-2 overflow-y-auto"></div>
             
             <!-- 中央エリア -->
             <div class="md:col-span-3 flex flex-col gap-2" style="min-height: 0;">
-                <div class="card p-4 flex flex-col items-center justify-center text-center h-24">
-                     <h2 class="text-lg font-bold">現在の弾倉</h2>
-                     <p class="text-lg">実弾 <span id="live-rounds" class="text-red-500 font-bold text-2xl">0</span> / 空砲 <span id="blank-rounds" class="text-blue-400 font-bold text-2xl">0</span></p>
+                <div class="card p-3 flex flex-col items-center justify-center text-center h-24 flex-shrink-0">
+                     <h2 class="text-base font-bold">現在の弾倉</h2>
+                     <p class="text-lg">実弾 <span id="live-rounds" class="text-red-500 font-bold text-xl">0</span> / 空砲 <span id="blank-rounds" class="text-blue-400 font-bold text-xl">0</span></p>
                 </div>
-                <!-- ★変更点: ログコンテナをflex-growとoverflow-hiddenで囲み、スクロールを確実にする -->
+                <!-- ログコンテナをflex-growとoverflow-hiddenで囲み、スクロールを確実にする -->
                 <div class="card p-4 flex-grow flex flex-col" style="min-height: 0; overflow: hidden;">
-                    <h2 class="text-xl font-bold mb-2 border-b border-gray-500 flex-shrink-0">ゲームログ</h2>
+                    <h2 class="text-lg font-bold mb-2 border-b border-gray-500 flex-shrink-0">ゲームログ</h2>
                     <div id="game-log" class="flex-grow overflow-y-auto space-y-2 pr-2"></div>
                 </div>
             </div>
         </div>
 
         <!-- 自分の情報とアクション (下) -->
-        <div id="my-info-area" class="card p-3 mt-2">
+        <div id="my-info-area" class="card p-3 mt-2 flex-shrink-0">
             <div class="flex justify-between items-center">
-                <div class="flex-1">
-                    <h3 id="my-name" class="text-xl font-bold"></h3>
+                <div class="flex-1 pr-2">
+                    <h3 id="my-name" class="text-lg md:text-xl font-bold truncate"></h3>
                     <div class="w-full bg-gray-600 rounded-full h-4 mt-1">
                         <div id="my-hp-bar" class="hp-bar-inner h-4 rounded-full"></div>
                     </div>
                 </div>
-                <div id="my-actions" class="flex items-center gap-2 pl-4">
+                <div id="my-actions" class="flex items-center gap-2 pl-2">
                      <button id="shoot-self-btn" class="p-2 btn text-sm">自分を撃つ</button>
                 </div>
             </div>
              <div class="mt-2">
-                <p class="text-sm text-center text-gray-400">所持アイテム（クリックで使用）</p>
+                <p class="text-xs text-center text-gray-400">所持アイテム（クリックで使用）</p>
                 <div id="my-items" class="grid grid-cols-4 gap-2 mt-1"></div>
             </div>
         </div>
@@ -165,7 +174,7 @@
     </div>
 
     <!-- モーダルウィンドウ (ターン交代、対象選択など) -->
-    <div id="modal" class="fixed inset-0 z-50 flex items-center justify-center hidden">
+    <div id="modal" class="fixed inset-0 z-50 flex items-center justify-center hidden p-4">
         <div class="modal-backdrop fixed inset-0"></div>
         <div id="modal-card" class="card p-6 relative z-10 w-full max-w-md text-center">
             <h3 id="modal-title" class="text-2xl font-bold mb-4"></h3>
@@ -197,13 +206,12 @@
                 // ★ここに音声ファイルを追加・変更してください
                 // 例: this.sounds.bgm = new Audio('./sounds/bgm.mp3');
                 this.sounds = {
-                    'bgm': null, // BGMは長いため、ファイルパスを指定してください
+                    'bgm': null,
                     'shoot_live': null,
                     'shoot_blank': null,
                     'item_use': null,
                     'turn_change': null,
                 };
-                // BGMのループ設定
                 if (this.sounds.bgm) this.sounds.bgm.loop = true;
             },
             play(name) {
@@ -304,7 +312,7 @@
             startRound();
         }
 
-        // --- ゲーム進行の関数 ---
+        // --- ゲーム進行の関数 (変更なし) ---
         function startRound() {
             addLogEntry('--- 新ラウンド開始 ---');
             const liveRounds = Math.ceil(Math.random() * 3) + 1;
@@ -336,7 +344,6 @@
             
             let logMessage = `${currentPlayer.name}が${targetPlayer.id === currentPlayer.id ? '自分' : targetPlayer.name}を撃った...`;
             if (isLive) {
-                // ★変更点: 実弾の効果音と画面揺れ
                 audioManager.play('shoot_live');
                 triggerScreenShake('hard');
                 const damage = currentPlayer.usedSaw ? 2 : 1;
@@ -350,7 +357,6 @@
                 currentPlayer.usedSaw = false;
                 endTurn();
             } else {
-                // ★変更点: 空砲の効果音と画面揺れ
                 audioManager.play('shoot_blank');
                 triggerScreenShake('soft');
                 logMessage += ' 空砲だった。';
@@ -483,10 +489,10 @@
                     playerCard.onclick = () => handleTargetSelection(player.id);
                 }
                 const hpPercentage = (player.hp / player.maxHp) * 100;
-                playerCard.innerHTML = `<h3 class="text-base font-bold">${player.name} ${!player.isAlive ? '[脱落]' : ''}</h3><div class="w-full bg-gray-600 rounded-full h-3"><div class="hp-bar-inner h-3 rounded-full" style="width: ${hpPercentage}%"></div></div><div class="flex items-center text-xs"><span>アイテム:</span><div class="flex-1 flex gap-1 ml-1">${player.items.map(() => `<div class="aspect-square w-6 bg-gray-600 rounded"></div>`).join('') || '<span class="text-gray-400">なし</span>'}</div></div>`;
+                playerCard.innerHTML = `<h3 class="text-base font-bold truncate">${player.name} ${!player.isAlive ? '[脱落]' : ''}</h3><div class="w-full bg-gray-600 rounded-full h-3"><div class="hp-bar-inner h-3 rounded-full" style="width: ${hpPercentage}%"></div></div><div class="flex items-center text-xs"><span>アイテム:</span><div class="flex-1 flex gap-1 ml-1">${player.items.map(() => `<div class="aspect-square w-6 bg-gray-600 rounded"></div>`).join('') || '<span class="text-gray-400">なし</span>'}</div></div>`;
                 if (!isTargetMode && player.isAlive) {
                     const shootButton = document.createElement('button');
-                    shootButton.className = 'w-full mt-2 btn btn-danger text-sm';
+                    shootButton.className = 'w-full mt-2 btn btn-danger text-sm p-1';
                     shootButton.textContent = '撃つ';
                     shootButton.onclick = () => handleShoot(player.id);
                     playerCard.appendChild(shootButton);
@@ -500,13 +506,13 @@
             myItemsContainer.innerHTML = '';
             currentPlayer.items.forEach(itemKey => {
                 const itemDiv = document.createElement('div');
-                itemDiv.className = "item-card aspect-square rounded p-1 flex items-center justify-center text-lg font-bold";
+                itemDiv.className = "item-card aspect-square rounded p-1 flex items-center justify-center text-sm md:text-base font-bold";
                 itemDiv.title = ITEMS[itemKey].description;
                 itemDiv.textContent = ITEMS[itemKey].name.substring(0, 1);
                 itemDiv.onclick = () => { if (!gameState.itemTargetSelection) useItem(itemKey); };
                 myItemsContainer.appendChild(itemDiv);
             });
-            if(currentPlayer.items.length === 0) myItemsContainer.innerHTML = `<p class="col-span-4 text-center text-gray-400">アイテムはありません</p>`;
+            if(currentPlayer.items.length === 0) myItemsContainer.innerHTML = `<p class="col-span-4 text-center text-gray-400 text-sm">アイテムはありません</p>`;
 
             const isTargeting = !!gameState.itemTargetSelection;
             document.getElementById('shoot-self-btn').disabled = isTargeting;
@@ -526,12 +532,12 @@
         // --- 画面揺れ関数 ---
         function triggerScreenShake(intensity) {
             const className = intensity === 'hard' ? 'shake-hard' : 'shake-soft';
-            gameContainerUI.classList.remove('shake-hard', 'shake-soft');
-            void gameContainerUI.offsetWidth; // アニメーションをリスタートさせるためのリフロー
-            gameContainerUI.classList.add(className);
+            document.body.classList.remove('shake-hard', 'shake-soft');
+            void document.body.offsetWidth; // アニメーションをリスタートさせるためのリフロー
+            document.body.classList.add(className);
 
             setTimeout(() => {
-                gameContainerUI.classList.remove(className);
+                document.body.classList.remove(className);
             }, intensity === 'hard' ? 400 : 300);
         }
 
@@ -557,4 +563,3 @@
     </script>
 </body>
 </html>
-
