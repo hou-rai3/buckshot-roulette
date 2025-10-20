@@ -1,6 +1,7 @@
 # Buckshot Roulette (Offline)
 
 バックショット・ルーレットゲームのパクリ
+https://hou-rai3.github.io/buckshot-roulette/
 
 ## 特徴
 
