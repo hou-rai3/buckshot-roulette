@@ -173,6 +173,9 @@
                     </div>
                     <div id="my-hp-stars" class="flex items-center mt-1"></div>
                 </div>
+                <div id="my-actions" class="flex items-center gap-2 pl-2">
+                    <button id="shoot-self-btn" class="btn text-sm">自分を撃つ</button>
+                </div>
             </div>
         </footer>
     </div>
@@ -226,11 +229,11 @@
         const SOUND_EFFECTS = {
             'main-bgm': 'sounds/main-bgm.mp3',
             // --- 効果音 (ファイル名は例です) ---
-            'shoot-live': 'sounds/shoot-live.mp3',    // 実弾射撃音
-            'shoot-blank': 'sounds/shoot-blank.mp3',   // 空砲射撃音
-            'use-saw': 'sounds/use-saw.mp3',          // ノコギリ使用音
-            'use-cuffs': 'sounds/use-cuffs.mp3',      // 手錠使用音
-            'use-beer': 'sounds/use-beer.mp3',        // ビール使用音
+            'shoot-live': 'sounds/shoot-live.mp3',      // 実弾射撃音
+            'shoot-blank': 'sounds/shoot-blank.mp3',    // 空砲射撃音
+            'use-saw': 'sounds/use-saw.mp3',            // ノコギリ使用音
+            'use-cuffs': 'sounds/use-cuffs.mp3',        // 手錠使用音
+            'use-beer': 'sounds/use-beer.mp3',          // ビール使用音
             'use-item-generic': 'sounds/use-item-generic.mp3', // その他のアイテム使用音
             'screen-shake-hard': 'sounds/screen-shake-hard.mp3', // 強い画面揺れ
             'screen-shake-soft': 'sounds/screen-shake-soft.mp3', // 弱い画面揺れ
@@ -263,6 +266,7 @@
             itemsBtn.addEventListener('click', showItemSelectionModal);
             connectBleBtn.addEventListener('click', connectBLE);
             muteBtn.addEventListener('click', toggleMute); // ミュートボタンのイベントリスナーを追加
+            document.getElementById('shoot-self-btn').addEventListener('click', () => handleShoot(gameState.players[gameState.currentTurnPlayerIndex].id));
         };
 
         // --- 音声関連の関数 ---
@@ -634,8 +638,8 @@
                 const playerCard = document.createElement('div');
                 playerCard.id = `player-card-${player.id}`;
                 
-                let cardClasses = 'card p-2 space-y-1 player-card cursor-pointer transition-all';
-                if (player.id === selectedTargetId) {
+                let cardClasses = 'card p-2 space-y-1 player-card transition-all';
+                if (player.id === selectedTargetId && !gameState.itemTargetSelection) { // Only highlight for BLE target
                     cardClasses += ' border-4 border-yellow-400';
                 }
                 playerCard.className = cardClasses;
@@ -655,10 +659,23 @@
                         </div>
                     </div>`;
                 
-                playerCard.onclick = () => selectTarget(player.id);
+                // 画面上の射撃ボタンを追加
+                const shootButton = document.createElement('button');
+                shootButton.className = 'w-full mt-2 btn btn-danger text-sm p-1';
+                shootButton.textContent = '撃つ';
+                shootButton.onclick = (e) => {
+                    e.stopPropagation(); // selectTargetが発火しないように
+                    handleShoot(player.id);
+                };
+                playerCard.appendChild(shootButton);
+                
+                // 物理コントローラー用のターゲット選択
+                playerCard.addEventListener('click', () => selectTarget(player.id));
+
 
                 if (gameState.itemTargetSelection) {
                     playerCard.classList.add('targetable');
+                    shootButton.style.display = 'none';
                     playerCard.onclick = () => handleTargetSelection(player.id);
                 }
                 playersGrid.appendChild(playerCard);
@@ -666,12 +683,13 @@
 
             // 自分の情報エリアを描画
             const myInfoArea = document.getElementById('my-info-area');
-            let myCardClasses = 'card p-3 mt-auto flex-shrink-0 cursor-pointer transition-all';
-            if (currentPlayer.id === selectedTargetId) {
+            let myCardClasses = 'card p-3 mt-auto flex-shrink-0 transition-all';
+             if (currentPlayer.id === selectedTargetId  && !gameState.itemTargetSelection) { // Only highlight for BLE target
                 myCardClasses += ' border-4 border-yellow-400';
             }
             myInfoArea.className = myCardClasses;
             myInfoArea.onclick = () => selectTarget(currentPlayer.id);
+
 
             document.getElementById('my-name').textContent = `${currentPlayer.name} (あなたのターン)`;
             document.getElementById('my-hp-stars').innerHTML = generateHpStars(currentPlayer.hp, currentPlayer.maxHp);
@@ -694,6 +712,7 @@
 
         function setActionButtonsDisabled(state) {
             document.getElementById('items-btn').disabled = state;
+            document.getElementById('shoot-self-btn').disabled = state;
             document.querySelectorAll('#players-grid button').forEach(btn => btn.disabled = state);
         }
 
@@ -879,3 +898,4 @@
     </script>
 </body>
 </html>
+
