@@ -146,10 +146,15 @@
     <div id="game-container" class="w-full h-full flex flex-col p-2 hidden">
         <header class="flex-shrink-0 flex justify-between items-center mb-2">
             <h1 class="text-lg md:text-2xl pixel-font text-red-500">BUCKSHOT ROULETTE</h1>
-            <div class="flex gap-2">
+            <div class="flex gap-2 items-center">
                 <button id="reconnect-ble-btn" class="btn text-xs hidden">再接続</button>
                 <button id="items-btn" class="btn text-xs">アイテム</button>
-                <button id="mute-btn" class="btn text-xs">Mute BGM</button>
+                <button id="mute-btn" class="btn text-xs">ミュート</button>
+                <div class="flex items-center gap-1">
+                    <button id="volume-down-btn" class="btn text-xs px-2">-</button>
+                    <span id="volume-display" class="text-xs w-10 text-center">50%</span>
+                    <button id="volume-up-btn" class="btn text-xs px-2">+</button>
+                </div>
             </div>
         </header>
 
@@ -212,6 +217,7 @@
         let bleCharacteristic;
         let bleDevice;
         let bgmAudio; 
+        let currentVolume = 0.5;
 
         // --- Constants ---
         const ITEMS = {
@@ -228,13 +234,13 @@
         const STAR_SVG = `<svg viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"></path></svg>`;
         
         const SOUND_EFFECTS = {
-            'main-bgm': 'sounds/main-bgm.mp3',//試合中のbgm
-            'shoot-live': 'sounds/shoot-live.mp3',      //射撃(実弾)
-            'shoot-blank': 'sounds/shoot-blank.mp3',   //射撃(空弾)
-            'load-shell': 'sounds/load-shell.mp3',     //弾倉装填
-            'pump-action': 'sounds/pump-action.mp3',   //ポンプアクション
-            'select-target': 'sounds/select-target.mp3', //選択
-            'use-saw': 'sounds/use-saw.mp3',            //のこぎり
+            'main-bgm': 'sounds/main-bgm.mp3',
+            'shoot-live': 'sounds/shoot-live.mp3',      
+            'shoot-blank': 'sounds/shoot-blank.mp3',   
+            'load-shell': 'sounds/load-shell.mp3',     
+            'pump-action': 'sounds/pump-action.mp3',   
+            'select-target': 'sounds/select-target.mp3', 
+            'use-saw': 'sounds/use-saw.mp3',            
             'use-cuffs': 'sounds/use-cuffs.mp3',        
             'use-beer': 'sounds/use-beer.mp3',          
             'use-item-generic': 'sounds/use-item-generic.mp3',
@@ -261,6 +267,9 @@
         const modalBackdrop = document.querySelector('.modal-backdrop');
         const connectBleBtn = document.getElementById('connect-ble-btn');
         const reconnectBleBtn = document.getElementById('reconnect-ble-btn');
+        const volumeDownBtn = document.getElementById('volume-down-btn');
+        const volumeUpBtn = document.getElementById('volume-up-btn');
+        const volumeDisplay = document.getElementById('volume-display');
 
         // --- Initialization ---
         window.onload = () => {
@@ -271,6 +280,8 @@
             connectBleBtn.addEventListener('click', connectBLE);
             reconnectBleBtn.addEventListener('click', connectBLE);
             muteBtn.addEventListener('click', toggleMute);
+            volumeDownBtn.addEventListener('click', decreaseVolume);
+            volumeUpBtn.addEventListener('click', increaseVolume);
             document.getElementById('shoot-self-btn').addEventListener('click', () => {
                 if(gameState.isActionLocked) return;
                 handleShoot(gameState.players[gameState.currentTurnPlayerIndex].id)
@@ -281,6 +292,7 @@
         function playSound(soundKey) {
             if (SOUND_EFFECTS[soundKey] && (!bgmAudio || !bgmAudio.muted)) {
                 const sound = new Audio(SOUND_EFFECTS[soundKey]);
+                sound.volume = currentVolume;
                 sound.play().catch(e => console.error(`Error playing sound ${soundKey}:`, e));
             }
         }
@@ -288,7 +300,23 @@
         function toggleMute() {
             if (!bgmAudio) return;
             bgmAudio.muted = !bgmAudio.muted;
-            muteBtn.textContent = bgmAudio.muted ? 'Unmute BGM' : 'Mute BGM';
+            muteBtn.textContent = bgmAudio.muted ? 'ミュート解除' : 'ミュート';
+        }
+        
+        function updateVolumeDisplay() {
+            volumeDisplay.textContent = `${Math.round(currentVolume * 100)}%`;
+        }
+
+        function decreaseVolume() {
+            currentVolume = Math.max(0, currentVolume - 0.1);
+            if (bgmAudio) bgmAudio.volume = currentVolume;
+            updateVolumeDisplay();
+        }
+
+        function increaseVolume() {
+            currentVolume = Math.min(1, currentVolume + 0.1);
+            if (bgmAudio) bgmAudio.volume = currentVolume;
+            updateVolumeDisplay();
         }
 
         // --- Bluetooth Functions ---
@@ -297,7 +325,7 @@
             const CHARACTERISTIC_UUID = 'beb5483e-36e1-4688-b7f5-ea07361b26a8';
 
             try {
-                console.log('Requesting Bluetooth Device...');
+                console.log('BLEデバイスを検索中...');
                 bleDevice = await navigator.bluetooth.requestDevice({
                     filters: [{ services: [SERVICE_UUID] }],
                 });
@@ -306,7 +334,7 @@
                     bleDevice.addEventListener('gattserverdisconnected', onDisconnected);
                 }
 
-                console.log('Connecting to GATT Server...', bleDevice.name);
+                console.log('デバイスに接続中...', bleDevice.name);
                 const server = await bleDevice.gatt.connect();
                 const service = await server.getPrimaryService(SERVICE_UUID);
                 bleCharacteristic = await service.getCharacteristic(CHARACTERISTIC_UUID);
@@ -314,25 +342,25 @@
                 await bleCharacteristic.startNotifications();
                 bleCharacteristic.addEventListener('characteristicvaluechanged', handleNotifications);
 
-                console.log('BLE Controller Connected!');
-                connectBleBtn.textContent = 'Connected';
+                console.log('BLEコントローラー接続完了！');
+                connectBleBtn.textContent = '接続済み';
                 connectBleBtn.disabled = true;
                 reconnectBleBtn.classList.add('hidden');
 
             } catch (error) {
-                console.error('BLE Connection Error:', error);
-                alert('BLE Connection Failed: ' + error);
+                console.error('BLE接続エラー:', error);
+                alert('BLE接続に失敗しました: ' + error);
             }
         }
 
         function onDisconnected(event) {
-            console.log('BLE Device Disconnected.');
-            addLog('Controller Disconnected.', 'info');
+            console.log('BLEデバイスが切断されました。');
+            addLog('コントローラーが切断されました。', 'info');
             bleCharacteristic = null;
             
             reconnectBleBtn.classList.remove('hidden');
 
-            connectBleBtn.textContent = 'Connect Controller';
+            connectBleBtn.textContent = 'コントローラー接続';
             connectBleBtn.disabled = false;
         }
 
@@ -340,15 +368,15 @@
             const value = event.target.value;
             const decoder = new TextDecoder('utf-8');
             const command = decoder.decode(value);
-            console.log('Received Command:', command);
+            console.log('受信コマンド:', command);
 
             if (command === 'fire') {
                 if (selectedTargetId === null) {
-                    console.log('Target not selected');
+                    console.log('ターゲットが選択されていません');
                     triggerScreenShake('soft');
                     return;
                 }
-                console.log(`Firing at selected target (ID: ${selectedTargetId})`);
+                console.log(`選択されたターゲット (ID: ${selectedTargetId}) を撃ちます`);
                 handleShoot(selectedTargetId);
                 selectedTargetId = null;
             }
@@ -370,14 +398,15 @@
         function startGame() {
             const playerInputs = document.querySelectorAll('.player-name-input');
             const playerNames = Array.from(playerInputs).map(input => input.value.trim()).filter(name => name);
-            if (playerNames.length < 2) { lobbyErrorUI.textContent = 'Please enter at least 2 player names.'; return; }
-            if (new Set(playerNames).size !== playerNames.length) { lobbyErrorUI.textContent = 'Player names must be unique.'; return; }
+            if (playerNames.length < 2) { lobbyErrorUI.textContent = '少なくとも2人のプレイヤー名を入力してください。'; return; }
+            if (new Set(playerNames).size !== playerNames.length) { lobbyErrorUI.textContent = 'プレイヤー名は重複しないようにしてください。'; return; }
 
             if (!bgmAudio) {
                 bgmAudio = new Audio(SOUND_EFFECTS['main-bgm']);
                 bgmAudio.loop = true;
+                bgmAudio.volume = currentVolume;
                 bgmAudio.play().catch(e => {
-                    console.error("BGM failed to play. Will try again after user interaction.", e);
+                    console.error("BGMの再生に失敗しました。ユーザー操作後に再試行します。", e);
                     document.body.addEventListener('click', () => bgmAudio.play(), { once: true });
                 });
             }
@@ -393,7 +422,7 @@
             };
             
             gameLogUI.innerHTML = '';
-            addLog('Game Start!', 'info');
+            addLog('ゲーム開始！', 'info');
 
             lobbyUI.classList.remove('flex');
             lobbyUI.classList.add('hidden');
@@ -418,7 +447,7 @@
             }
 
             let chamber = Array(liveRounds).fill('live').concat(Array(blankRounds).fill('blank'));
-            addLog(`Round ${gameState.roundNumber}: A new magazine is loaded.`, 'info');
+            addLog(`ラウンド ${gameState.roundNumber}: 新しい弾倉が装填された。`, 'info');
             gameState.shotgun = { chamber };
             gameState.players.forEach(p => { p.usedSaw = false; });
             displayAndScrambleShells();
@@ -439,7 +468,7 @@
             const shell = gameState.shotgun.chamber.shift();
             const isLive = shell === 'live';
             
-            addLog(`${currentPlayer.name} shoots at ${targetPlayer.name}...`);
+            addLog(`${currentPlayer.name}が${targetPlayer.name}を撃った...`);
 
             let turnContinues = false;
 
@@ -456,7 +485,7 @@
                     }
                 }
                 targetPlayer.hp -= damage;
-                addLog(`It's a live round! ${targetPlayer.name} takes ${damage} damage.`, 'damage');
+                addLog(`実弾！ ${targetPlayer.name}は${damage}ダメージを受けた。`, 'damage');
                 triggerScreenShake('hard');
                 triggerVignetteEffect('blood-splatter');
                 await new Promise(res => setTimeout(res, 1000));
@@ -464,17 +493,17 @@
                 if (targetPlayer.hp <= 0) {
                     targetPlayer.hp = 0;
                     targetPlayer.isAlive = false;
-                    addLog(`${targetPlayer.name} is down...`, 'damage');
+                    addLog(`${targetPlayer.name}は倒れた...`, 'damage');
                 }
                 currentPlayer.usedSaw = false;
             } else {
                 playSound('shoot-blank'); 
                 triggerScreenShake('soft');
-                addLog('It was a blank.');
+                addLog('空砲だった。');
                 await new Promise(res => setTimeout(res, 1000));
                 playSound('pump-action');
                 if (targetPlayer.id === currentPlayer.id) {
-                    addLog('The turn continues.', 'action');
+                    addLog('ターンは継続する。', 'action');
                     turnContinues = true;
                 }
             }
@@ -485,7 +514,7 @@
             }
 
             if (gameState.shotgun.chamber.length === 0) {
-                addLog('The magazine is empty.', 'info');
+                addLog('弾倉が空になった。', 'info');
                 gameState.isActionLocked = true;
                 renderGame();
                 setTimeout(startRound, 2000);
@@ -508,8 +537,8 @@
                 if (nextPlayer.isAlive) {
                     if (nextPlayer.isHandcuffed) {
                         nextPlayer.isHandcuffed = false;
-                        addLog(`${nextPlayer.name} is handcuffed! Their turn is skipped.`, 'action');
-                        await showInfoModal(`${nextPlayer.name} is handcuffed!`, 'Turn is skipped.');
+                        addLog(`${nextPlayer.name}は手錠で動けない！ ターンをスキップ。`, 'action');
+                        await showInfoModal(`${nextPlayer.name}は手錠をかけられている！`, 'ターンはスキップされます。');
                         nextPlayerIndex = (nextPlayerIndex + 1) % gameState.players.length;
                     } else {
                         break;
@@ -533,7 +562,7 @@
             renderGame();
             
             const currentPlayer = gameState.players[gameState.currentTurnPlayerIndex];
-            addLog(`${currentPlayer.name} uses ${ITEMS[itemKey].name}.`, 'action');
+            addLog(`${currentPlayer.name}が${ITEMS[itemKey].name}を使用した。`, 'action');
 
             let unlockAction = true;
 
@@ -541,7 +570,7 @@
                 case 'saw':
                     playSound('use-saw');
                     currentPlayer.usedSaw = true;
-                    await showInfoModal('Saw Used', 'The next live round will deal 2 damage.');
+                    await showInfoModal('ノコギリ使用', '次の実弾ダメージが2になります。');
                     break;
                 case 'magnifying-glass':
                     playSound('use-item-generic');
@@ -562,10 +591,10 @@
                     playSound('use-beer');
                     if (gameState.shotgun.chamber.length > 0) {
                         const ejectedShell = gameState.shotgun.chamber.shift();
-                        const shellText = ejectedShell === 'live' ? 'a Live round' : 'a Blank';
-                        await showInfoModal('Beer Used', `Ejected one shell... (${shellText})`);
+                        const shellText = ejectedShell === 'live' ? '実弾' : '空砲';
+                        await showInfoModal('ビール使用', `弾を1つ排出した... (${shellText})`);
                     } else {
-                        await showInfoModal('Beer Used', 'The magazine was empty.');
+                        await showInfoModal('ビール使用', '弾倉は空だった。');
                     }
                     break;
                 case 'expired-medicine':
@@ -574,15 +603,15 @@
                     const healed = Math.random() < 0.5;
                     if (healed) {
                         currentPlayer.hp = Math.min(currentPlayer.maxHp, currentPlayer.hp + 2);
-                        await showInfoModal('Expired Medicine', 'Healed for 2 HP!');
+                        await showInfoModal('期限切れ薬', 'ライフが2回復した！');
                     } else {
                         currentPlayer.hp--;
-                        await showInfoModal('Expired Medicine', 'Lost 1 HP...');
+                        await showInfoModal('期限切れ薬', 'ライフが1減少した...');
                     }
                     if (currentPlayer.hp <= 0) {
                         currentPlayer.hp = 0;
                         currentPlayer.isAlive = false;
-                        addLog(`${currentPlayer.name} is down...`, 'damage');
+                        addLog(`${currentPlayer.name}は倒れた...`, 'damage');
                         checkGameOver();
                     }
                     break;
@@ -590,9 +619,9 @@
                     playSound('use-item-generic');
                     if (gameState.shotgun.chamber.length > 0) {
                         gameState.shotgun.chamber.reverse();
-                        await showInfoModal('Inverter', 'The magazine contents have been reversed.');
+                        await showInfoModal('インバータ', '弾倉の中身を反転させた。');
                     } else {
-                        await showInfoModal('Inverter', 'The magazine was empty.');
+                        await showInfoModal('インバータ', '弾倉は空だった。');
                     }
                     break;
                 case 'disposable-phone':
@@ -600,19 +629,19 @@
                     if (gameState.shotgun.chamber.length > 1) {
                         const randomIndex = Math.floor(Math.random() * gameState.shotgun.chamber.length);
                         const randomShell = gameState.shotgun.chamber[randomIndex];
-                        const shellText = randomShell === 'live' ? `<span class="text-red-500">Live</span>` : `<span class="text-blue-500">Blank</span>`;
-                        let noisyText = `The ${randomIndex + 1}th shell is... `;
+                        const shellText = randomShell === 'live' ? `<span class="text-red-500">実弾</span>` : `<span class="text-blue-500">空砲</span>`;
+                        let noisyText = `${randomIndex + 1}発目は... `;
                         for(let i=0; i<6; i++) noisyText += `*`;
                         noisyText += shellText;
                         for(let i=0; i<4; i++) noisyText += `*`;
-                        await showInfoModal('Disposable Phone', noisyText);
+                        await showInfoModal('使い捨て携帯', noisyText);
                     } else {
-                        await showInfoModal('Disposable Phone', 'Not enough shells to use.');
+                        await showInfoModal('使い捨て携帯', '弾が少なすぎて使えなかった。');
                     }
                     break;
                 case 'adrenaline':
                     playSound('use-item-generic');
-                    await showInfoModal('Adrenaline', 'This item is currently under development.');
+                    await showInfoModal('アドレナリン', 'このアイテムは現在実装中です。');
                     break;
             }
             
@@ -631,7 +660,7 @@
 
             if (itemKey === 'handcuffs') {
                 targetPlayer.isHandcuffed = true;
-                addLog(`${currentPlayer.name} handcuffed ${targetPlayer.name}.`, 'action');
+                addLog(`${currentPlayer.name}が${targetPlayer.name}に手錠をかけた。`, 'action');
                 triggerScreenShake('soft');
             }
 
@@ -645,9 +674,9 @@
             if (alivePlayers.length <= 1) {
                 gameState.gameState = 'finished';
                 const winner = alivePlayers[0];
-                const title = winner ? `${winner.name} Wins!` : 'Draw!';
-                const content = winner ? 'Congratulations!' : 'There was no winner.';
-                if (winner) addLog(`${winner.name} Wins!`, 'info');
+                const title = winner ? `${winner.name}の勝利！` : '引き分け！';
+                const content = winner ? 'おめでとうございます！' : '勝者はいませんでした。';
+                if (winner) addLog(`${winner.name}の勝利！`, 'info');
                 showModal(title, content, () => { window.location.reload(); });
                 return true;
             }
@@ -674,7 +703,7 @@
 
                 let statusIconsHTML = '';
                 if(player.isHandcuffed) {
-                    statusIconsHTML += `<span class="status-icon text-gray-400" title="Handcuffed">${ITEMS.handcuffs.svg}</span>`;
+                    statusIconsHTML += `<span class="status-icon text-gray-400" title="手錠">${ITEMS.handcuffs.svg}</span>`;
                 }
                 playerCard.innerHTML = `
                     <div class="flex justify-between items-start">
@@ -689,7 +718,7 @@
                 
                 const shootButton = document.createElement('button');
                 shootButton.className = 'w-full mt-2 btn btn-danger text-sm p-1';
-                shootButton.textContent = 'Shoot';
+                shootButton.textContent = '撃つ';
                 shootButton.onclick = (e) => {
                     e.stopPropagation(); 
                     handleShoot(player.id);
@@ -715,13 +744,13 @@
             myInfoArea.className = myCardClasses;
             myInfoArea.onclick = () => selectTarget(currentPlayer.id);
 
-            document.getElementById('my-name').textContent = `${currentPlayer.name} (Your Turn)`;
+            document.getElementById('my-name').textContent = `${currentPlayer.name} (あなたのターン)`;
             document.getElementById('my-hp-stars').innerHTML = generateHpStars(currentPlayer.hp, currentPlayer.maxHp);
             
             const myStatusIcons = document.getElementById('my-status-icons');
             myStatusIcons.innerHTML = '';
             if (currentPlayer.isHandcuffed) {
-                myStatusIcons.innerHTML = `<span class="status-icon text-gray-400" title="Handcuffed">${ITEMS.handcuffs.svg}</span>`;
+                myStatusIcons.innerHTML = `<span class="status-icon text-gray-400" title="手錠">${ITEMS.handcuffs.svg}</span>`;
             }
             
             setActionButtonsDisabled(gameState.isActionLocked || !!gameState.itemTargetSelection);
@@ -731,7 +760,7 @@
             if (gameState.isActionLocked) return;
             playSound('select-target');
             selectedTargetId = (selectedTargetId === playerId) ? null : playerId;
-            console.log(`Target selected: Player ID ${selectedTargetId}`);
+            console.log(`ターゲット選択: Player ID ${selectedTargetId}`);
             renderGame();
         }
 
@@ -763,7 +792,7 @@
             }
             contentHtml += '</div>';
 
-            modalTitleUI.textContent = 'Select Item';
+            modalTitleUI.textContent = 'アイテムを選択';
             modalContentUI.innerHTML = contentHtml;
             modalConfirmBtn.style.display = 'none'; 
             modalUI.classList.remove('hidden');
@@ -784,8 +813,8 @@
         async function showShellLoadingModal() {
             return new Promise(async (resolve) => {
                 modalCardUI.classList.add('modal-lg');
-                modalTitleUI.textContent = 'Loading Magazine';
-                modalContentUI.innerHTML = `<p class="mb-4 text-xl">Loading shells into magazine...</p><div id="shell-display-modal" class="flex flex-wrap justify-center items-center mt-2 min-h-[80px]"></div>`;
+                modalTitleUI.textContent = '弾倉装填';
+                modalContentUI.innerHTML = `<p class="mb-4 text-xl">弾倉に装填中...</p><div id="shell-display-modal" class="flex flex-wrap justify-center items-center mt-2 min-h-[80px]"></div>`;
                 modalConfirmBtn.style.display = 'none';
                 modalUI.classList.remove('hidden');
                 modalUI.classList.add('flex');
@@ -799,14 +828,14 @@
                     block.style.width = '35px';
                     block.style.height = '60px';
                     block.style.animationDelay = `${i * 100}ms`;
-                    setTimeout(() => playSound('load-shell'), i * 150);
+                    setTimeout(() => playSound('load-shell'), i * 120);
                     block.classList.add('shell-in-anim');
                     display.appendChild(block);
                 });
 
                 await new Promise(res => setTimeout(res, 3000));
 
-                modalContentUI.querySelector('p').textContent = 'Shuffling...';
+                modalContentUI.querySelector('p').textContent = 'シャッフル中...';
                 const shellElements = Array.from(display.children);
                 for (let i = 0; i < 3; i++) {
                     shellElements.sort(() => Math.random() - 0.5).forEach(el => display.appendChild(el));
@@ -836,8 +865,8 @@
             return new Promise(resolve => {
                 modalCardUI.classList.add('modal-lg');
                 const nextShell = gameState.shotgun.chamber[0] || 'empty';
-                modalTitleUI.textContent = 'Magnifying Glass';
-                modalContentUI.innerHTML = `<p class="mb-4 text-xl">The next shell is...</p><div id="revealed-shell-container" class="flex justify-center items-center h-32"></div>`;
+                modalTitleUI.textContent = '虫眼鏡使用';
+                modalContentUI.innerHTML = `<p class="mb-4 text-xl">次の弾は...</p><div id="revealed-shell-container" class="flex justify-center items-center h-32"></div>`;
                 modalConfirmBtn.onclick = () => {
                     modalUI.classList.add('hidden');
                     modalCardUI.classList.remove('modal-lg');
@@ -850,9 +879,9 @@
                 setTimeout(() => {
                     const container = document.getElementById('revealed-shell-container');
                     if (nextShell !== 'empty') {
-                        container.innerHTML = `<div class="shell-block ${nextShell} reveal-shell-anim" style="width: 50px; height: 80px;"></div><p class="ml-4 text-3xl font-bold ${nextShell === 'live' ? 'text-red-500' : 'text-blue-500'} reveal-shell-anim">${nextShell === 'live' ? 'Live' : 'Blank'}</p>`;
+                        container.innerHTML = `<div class="shell-block ${nextShell} reveal-shell-anim" style="width: 50px; height: 80px;"></div><p class="ml-4 text-3xl font-bold ${nextShell === 'live' ? 'text-red-500' : 'text-blue-500'} reveal-shell-anim">${nextShell === 'live' ? '実弾' : '空砲'}</p>`;
                     } else {
-                        container.innerHTML = `<p class="text-3xl font-bold text-gray-400 reveal-shell-anim">The magazine is empty</p>`;
+                        container.innerHTML = `<p class="text-3xl font-bold text-gray-400 reveal-shell-anim">弾倉は空だ</p>`;
                     }
                 }, 1000);
             });
@@ -863,7 +892,7 @@
             if (inputs.length < 4) {
                 const newInput = document.createElement('input');
                 newInput.type = 'text';
-                newInput.placeholder = `Player ${inputs.length + 1} Name`;
+                newInput.placeholder = `プレイヤー${inputs.length + 1}の名前`;
                 newInput.className = 'player-name-input w-full p-2 rounded bg-gray-700 border border-gray-500 focus:outline-none focus:ring-2 focus:ring-red-500';
                 playerInputsUI.appendChild(newInput);
             }
@@ -896,7 +925,7 @@
         }
         function showTurnTransition() {
             const currentPlayer = gameState.players[gameState.currentTurnPlayerIndex];
-            showModal(`${currentPlayer.name}'s Turn`, `Pass the device to ${currentPlayer.name}.`,
+            showModal(`${currentPlayer.name} のターン`, `スマートフォンを ${currentPlayer.name} さんに渡してください。`,
                 () => { 
                     modalUI.classList.add('hidden');
                     gameState.isActionLocked = false;
