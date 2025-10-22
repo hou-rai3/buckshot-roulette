@@ -234,6 +234,7 @@
             'shoot-blank': 'sounds/shoot-blank.mp3',   
             'load-shell': 'sounds/load-shell.mp3',     
             'pump-action': 'sounds/pump-action.mp3',   
+            'select-target': 'sounds/select-target.mp3', 
             'use-saw': 'sounds/use-saw.mp3',            
             'use-cuffs': 'sounds/use-cuffs.mp3',        
             'use-beer': 'sounds/use-beer.mp3',          
@@ -656,13 +657,14 @@
             const playersGrid = document.getElementById('players-grid');
             playersGrid.innerHTML = '';
 
+            // 他のプレイヤーのカードを描画
             gameState.players.forEach(player => {
                 if (player.id === currentPlayer.id || !player.isAlive) return;
                 const playerCard = document.createElement('div');
                 playerCard.id = `player-card-${player.id}`;
                 
                 let cardClasses = 'card p-2 space-y-1 player-card transition-all';
-                if (player.id === selectedTargetId && !gameState.itemTargetSelection) {
+                if (player.id === selectedTargetId && !gameState.itemTargetSelection) { // Only highlight for BLE target
                     cardClasses += ' border-4 border-yellow-400';
                 }
                 playerCard.className = cardClasses;
@@ -723,6 +725,7 @@
 
         function selectTarget(playerId) {
             if (gameState.isActionLocked) return;
+            playSound('select-target');
             selectedTargetId = (selectedTargetId === playerId) ? null : playerId;
             console.log(`ターゲット選択: Player ID ${selectedTargetId}`);
             renderGame();
@@ -917,3 +920,4 @@
     </script>
 </body>
 </html>
+
