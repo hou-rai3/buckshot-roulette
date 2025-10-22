@@ -147,6 +147,7 @@
         <header class="flex-shrink-0 flex justify-between items-center mb-2">
             <h1 class="text-lg md:text-2xl pixel-font text-red-500">BUCKSHOT ROULETTE</h1>
             <div class="flex gap-2">
+                <button id="reconnect-ble-btn" class="btn text-xs hidden">再接続</button>
                 <button id="items-btn" class="btn text-xs">アイテム</button>
                 <button id="mute-btn" class="btn text-xs">Mute BGM</button>
             </div>
@@ -209,6 +210,7 @@
         let selectedTargetId = null;
         let gameState = {};
         let bleCharacteristic;
+        let bleDevice;
         let bgmAudio; // BGM用のAudioオブジェクト
 
         // --- 定数 ---
@@ -257,6 +259,7 @@
         const modalConfirmBtn = document.getElementById('modal-confirm-btn');
         const modalBackdrop = document.querySelector('.modal-backdrop');
         const connectBleBtn = document.getElementById('connect-ble-btn');
+        const reconnectBleBtn = document.getElementById('reconnect-ble-btn');
 
         // --- 初期化処理 ---
         window.onload = () => {
@@ -265,8 +268,12 @@
             startGameBtn.addEventListener('click', startGame);
             itemsBtn.addEventListener('click', showItemSelectionModal);
             connectBleBtn.addEventListener('click', connectBLE);
-            muteBtn.addEventListener('click', toggleMute); // ミュートボタンのイベントリスナーを追加
-            document.getElementById('shoot-self-btn').addEventListener('click', () => handleShoot(gameState.players[gameState.currentTurnPlayerIndex].id));
+            reconnectBleBtn.addEventListener('click', connectBLE);
+            muteBtn.addEventListener('click', toggleMute);
+            document.getElementById('shoot-self-btn').addEventListener('click', () => {
+                if(gameState.isActionLocked) return;
+                handleShoot(gameState.players[gameState.currentTurnPlayerIndex].id)
+            });
         };
 
         // --- 音声関連の関数 ---
@@ -290,12 +297,16 @@
 
             try {
                 console.log('BLEデバイスを検索中...');
-                const device = await navigator.bluetooth.requestDevice({
+                bleDevice = await navigator.bluetooth.requestDevice({
                     filters: [{ services: [SERVICE_UUID] }],
                 });
 
-                console.log('デバイスに接続中...', device.name);
-                const server = await device.gatt.connect();
+                if (bleDevice) {
+                    bleDevice.addEventListener('gattserverdisconnected', onDisconnected);
+                }
+
+                console.log('デバイスに接続中...', bleDevice.name);
+                const server = await bleDevice.gatt.connect();
                 const service = await server.getPrimaryService(SERVICE_UUID);
                 bleCharacteristic = await service.getCharacteristic(CHARACTERISTIC_UUID);
 
@@ -305,11 +316,23 @@
                 console.log('BLEコントローラー接続完了！');
                 connectBleBtn.textContent = '接続済み';
                 connectBleBtn.disabled = true;
+                reconnectBleBtn.classList.add('hidden');
 
             } catch (error) {
                 console.error('BLE接続エラー:', error);
                 alert('BLE接続に失敗しました: ' + error);
             }
+        }
+
+        function onDisconnected(event) {
+            console.log('BLEデバイスが切断されました。');
+            addLog('コントローラーが切断されました。', 'info');
+            bleCharacteristic = null;
+            
+            reconnectBleBtn.classList.remove('hidden');
+
+            connectBleBtn.textContent = 'コントローラー接続';
+            connectBleBtn.disabled = false;
         }
 
         function handleNotifications(event) {
@@ -349,13 +372,11 @@
             if (playerNames.length < 2) { lobbyErrorUI.textContent = '少なくとも2人のプレイヤー名を入力してください。'; return; }
             if (new Set(playerNames).size !== playerNames.length) { lobbyErrorUI.textContent = 'プレイヤー名は重複しないようにしてください。'; return; }
 
-            // BGMの再生を開始
             if (!bgmAudio) {
                 bgmAudio = new Audio(SOUND_EFFECTS['main-bgm']);
                 bgmAudio.loop = true;
                 bgmAudio.play().catch(e => {
                     console.error("BGMの再生に失敗しました。ユーザー操作後に再試行します。", e);
-                    // 多くのブラウザでは、ユーザーの最初の操作がないと音声を再生できない
                     document.body.addEventListener('click', () => bgmAudio.play(), { once: true });
                 });
             }
@@ -422,7 +443,6 @@
             let turnContinues = false;
 
             if (isLive) {
-                // playSound('shoot-live'); // 実弾の効果音
                 const damage = currentPlayer.usedSaw ? 2 : 1;
                 const hpContainerId = targetPlayer.id === currentPlayer.id ? 'my-hp-stars' : `player-hp-${targetPlayer.id}`;
                 const hpContainer = document.getElementById(hpContainerId);
@@ -445,7 +465,6 @@
                 }
                 currentPlayer.usedSaw = false;
             } else {
-                // playSound('shoot-blank'); // 空砲の効果音
                 triggerScreenShake('soft');
                 addLog('空砲だった。');
                 await new Promise(res => setTimeout(res, 1000));
@@ -515,27 +534,22 @@
 
             switch(itemKey) {
                 case 'saw':
-                    // playSound('use-saw');
                     currentPlayer.usedSaw = true;
                     await showInfoModal('ノコギリ使用', '次の実弾ダメージが2になります。');
                     break;
                 case 'magnifying-glass':
-                    // playSound('use-item-generic');
                     await showMagnifyingGlassModal();
                     break;
                 case 'cigarette':
-                    // playSound('use-item-generic');
                     if (currentPlayer.hp < currentPlayer.maxHp) {
                         currentPlayer.hp++;
                     }
                     break;
                 case 'handcuffs':
-                    // playSound('use-cuffs');
                     gameState.itemTargetSelection = { itemKey: 'handcuffs' };
                     unlockAction = false; 
                     break;
                 case 'beer':
-                    // playSound('use-beer');
                     if (gameState.shotgun.chamber.length > 0) {
                         const ejectedShell = gameState.shotgun.chamber.shift();
                         const shellText = ejectedShell === 'live' ? '実弾' : '空砲';
@@ -545,7 +559,6 @@
                     }
                     break;
                 case 'expired-medicine':
-                    // playSound('use-item-generic');
                     triggerScreenShake('soft');
                     const healed = Math.random() < 0.5;
                     if (healed) {
@@ -563,7 +576,6 @@
                     }
                     break;
                 case 'inverter':
-                    // playSound('use-item-generic');
                     if (gameState.shotgun.chamber.length > 0) {
                         gameState.shotgun.chamber.reverse();
                         await showInfoModal('インバータ', '弾倉の中身を反転させた。');
@@ -572,7 +584,6 @@
                     }
                     break;
                 case 'disposable-phone':
-                    // playSound('use-item-generic');
                     if (gameState.shotgun.chamber.length > 1) {
                         const randomIndex = Math.floor(Math.random() * gameState.shotgun.chamber.length);
                         const randomShell = gameState.shotgun.chamber[randomIndex];
@@ -583,7 +594,6 @@
                     }
                     break;
                 case 'adrenaline':
-                    // playSound('use-item-generic');
                     await showInfoModal('アドレナリン', 'このアイテムは現在実装中です。');
                     break;
             }
@@ -659,19 +669,16 @@
                         </div>
                     </div>`;
                 
-                // 画面上の射撃ボタンを追加
                 const shootButton = document.createElement('button');
                 shootButton.className = 'w-full mt-2 btn btn-danger text-sm p-1';
                 shootButton.textContent = '撃つ';
                 shootButton.onclick = (e) => {
-                    e.stopPropagation(); // selectTargetが発火しないように
+                    e.stopPropagation(); 
                     handleShoot(player.id);
                 };
                 playerCard.appendChild(shootButton);
                 
-                // 物理コントローラー用のターゲット選択
                 playerCard.addEventListener('click', () => selectTarget(player.id));
-
 
                 if (gameState.itemTargetSelection) {
                     playerCard.classList.add('targetable');
@@ -681,15 +688,13 @@
                 playersGrid.appendChild(playerCard);
             });
 
-            // 自分の情報エリアを描画
             const myInfoArea = document.getElementById('my-info-area');
             let myCardClasses = 'card p-3 mt-auto flex-shrink-0 transition-all';
-             if (currentPlayer.id === selectedTargetId  && !gameState.itemTargetSelection) { // Only highlight for BLE target
+            if (currentPlayer.id === selectedTargetId  && !gameState.itemTargetSelection) {
                 myCardClasses += ' border-4 border-yellow-400';
             }
             myInfoArea.className = myCardClasses;
             myInfoArea.onclick = () => selectTarget(currentPlayer.id);
-
 
             document.getElementById('my-name').textContent = `${currentPlayer.name} (あなたのターン)`;
             document.getElementById('my-hp-stars').innerHTML = generateHpStars(currentPlayer.hp, currentPlayer.maxHp);
