@@ -1,4 +1,4 @@
-# Buckshot Roulette (Offline)
+# Buckshot Roulette(笑)
 
 バックショット・ルーレットゲームのパクリ
 https://hou-rai3.github.io/buckshot-roulette/
@@ -6,7 +6,6 @@ https://hou-rai3.github.io/buckshot-roulette/
 ## 特徴
 
 - 2-4人での対戦が可能
-- 完全オフライン動作
 - レスポンシブデザイン（PC・スマートフォン対応）
 - アイテムシステム搭載
 - 効果音とアニメーション対応
