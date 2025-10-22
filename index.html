@@ -517,7 +517,9 @@
                 addLog('弾倉が空になった。', 'info');
                 gameState.isActionLocked = true;
                 renderGame();
-                setTimeout(startRound, 2000);
+                setTimeout(() => {
+                    startRound(turnContinues ? gameState.currentTurnPlayerIndex : null)
+                }, 2000);
             } else {
                 if (turnContinues) {
                     gameState.isActionLocked = false;
@@ -528,8 +530,14 @@
             }
         }
 
-        async function endTurn() {
-            let nextPlayerIndex = (gameState.currentTurnPlayerIndex + 1) % gameState.players.length;
+        async function endTurn(forceNextPlayer = false) {
+            let nextPlayerIndex;
+            if (forceNextPlayer) {
+                nextPlayerIndex = forceNextPlayer;
+            } else {
+                nextPlayerIndex = (gameState.currentTurnPlayerIndex + 1) % gameState.players.length;
+            }
+
             let loopedOnce = false;
 
             while (true) {
@@ -546,7 +554,7 @@
                 } else {
                     nextPlayerIndex = (nextPlayerIndex + 1) % gameState.players.length;
                 }
-                if (nextPlayerIndex === (gameState.currentTurnPlayerIndex + 1) % gameState.players.length && loopedOnce) break;
+                if (nextPlayerIndex === ((gameState.currentTurnPlayerIndex + 1) % gameState.players.length) && loopedOnce) break;
                 if (nextPlayerIndex === gameState.currentTurnPlayerIndex) loopedOnce = true;
             }
 
@@ -935,7 +943,7 @@
         }
         function showModal(title, content, onConfirm) {
             modalTitleUI.textContent = title;
-            modalContentUI.innerHTML = `<p>${content}</p>`;
+            modalContentUI.innerHTML = `<div>${content}</div>`;
             modalConfirmBtn.style.display = 'block';
             modalConfirmBtn.onclick = onConfirm;
             modalUI.classList.remove('hidden');
