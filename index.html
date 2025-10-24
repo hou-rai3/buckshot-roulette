@@ -149,12 +149,7 @@
             <div class="flex gap-2 items-center">
                 <button id="reconnect-ble-btn" class="btn text-xs hidden">再接続</button>
                 <button id="items-btn" class="btn text-xs">アイテム</button>
-                <button id="mute-btn" class="btn text-xs">ミュート</button>
-                <div class="flex items-center gap-1">
-                    <button id="volume-down-btn" class="btn text-xs px-2">-</button>
-                    <span id="volume-display" class="text-xs w-10 text-center">50%</span>
-                    <button id="volume-up-btn" class="btn text-xs px-2">+</button>
-                </div>
+                <button id="volume-settings-btn" class="btn text-xs">音量設定</button>
             </div>
         </header>
 
@@ -217,7 +212,8 @@
         let bleCharacteristic;
         let bleDevice;
         let bgmAudio; 
-        let currentVolume = 0.5;
+        let bgmVolume = 0.5;
+        let sfxVolume = 0.5;
 
         // --- Constants ---
         const ITEMS = {
@@ -257,7 +253,6 @@
         const startGameBtn = document.getElementById('start-game-btn');
         const playerInputsUI = document.getElementById('player-inputs');
         const lobbyErrorUI = document.getElementById('lobby-error');
-        const muteBtn = document.getElementById('mute-btn');
         const itemsBtn = document.getElementById('items-btn');
         const modalUI = document.getElementById('modal');
         const modalCardUI = document.getElementById('modal-card');
@@ -267,9 +262,7 @@
         const modalBackdrop = document.querySelector('.modal-backdrop');
         const connectBleBtn = document.getElementById('connect-ble-btn');
         const reconnectBleBtn = document.getElementById('reconnect-ble-btn');
-        const volumeDownBtn = document.getElementById('volume-down-btn');
-        const volumeUpBtn = document.getElementById('volume-up-btn');
-        const volumeDisplay = document.getElementById('volume-display');
+        const volumeSettingsBtn = document.getElementById('volume-settings-btn');
 
         // --- Initialization ---
         window.onload = () => {
@@ -279,9 +272,7 @@
             itemsBtn.addEventListener('click', showItemSelectionModal);
             connectBleBtn.addEventListener('click', connectBLE);
             reconnectBleBtn.addEventListener('click', connectBLE);
-            muteBtn.addEventListener('click', toggleMute);
-            volumeDownBtn.addEventListener('click', decreaseVolume);
-            volumeUpBtn.addEventListener('click', increaseVolume);
+            volumeSettingsBtn.addEventListener('click', showVolumeModal);
             document.getElementById('shoot-self-btn').addEventListener('click', () => {
                 if(gameState.isActionLocked) return;
                 handleShoot(gameState.players[gameState.currentTurnPlayerIndex].id)
@@ -289,34 +280,61 @@
         };
 
         // --- Sound Functions ---
-        function playSound(soundKey) {
-            if (SOUND_EFFECTS[soundKey] && (!bgmAudio || !bgmAudio.muted)) {
+        function playSfx(soundKey) {
+            if (SOUND_EFFECTS[soundKey]) {
                 const sound = new Audio(SOUND_EFFECTS[soundKey]);
-                sound.volume = currentVolume;
+                sound.volume = sfxVolume;
                 sound.play().catch(e => console.error(`Error playing sound ${soundKey}:`, e));
             }
         }
 
-        function toggleMute() {
-            if (!bgmAudio) return;
-            bgmAudio.muted = !bgmAudio.muted;
-            muteBtn.textContent = bgmAudio.muted ? 'ミュート解除' : 'ミュート';
-        }
-        
-        function updateVolumeDisplay() {
-            volumeDisplay.textContent = `${Math.round(currentVolume * 100)}%`;
-        }
+        function showVolumeModal() {
+            const contentHtml = `
+                <div class="space-y-4 text-left">
+                    <div>
+                        <label for="bgm-slider" class="block mb-2">BGM音量: <span id="bgm-volume-label">${Math.round(bgmVolume * 100)}%</span></label>
+                        <input type="range" id="bgm-slider" min="0" max="100" value="${bgmVolume * 100}" class="w-full">
+                    </div>
+                    <div>
+                        <label for="sfx-slider" class="block mb-2">効果音音量: <span id="sfx-volume-label">${Math.round(sfxVolume * 100)}%</span></label>
+                        <input type="range" id="sfx-slider" min="0" max="100" value="${sfxVolume * 100}" class="w-full">
+                    </div>
+                </div>
+            `;
+            modalTitleUI.textContent = '音量設定';
+            modalContentUI.innerHTML = contentHtml;
+            modalConfirmBtn.textContent = '閉じる';
+            modalConfirmBtn.style.display = 'block';
 
-        function decreaseVolume() {
-            currentVolume = Math.max(0, currentVolume - 0.1);
-            if (bgmAudio) bgmAudio.volume = currentVolume;
-            updateVolumeDisplay();
-        }
+            const closeModal = () => {
+                modalUI.classList.add('hidden');
+                modalConfirmBtn.textContent = 'OK'; // Reset for other modals
+                modalBackdrop.onclick = null;
+            };
 
-        function increaseVolume() {
-            currentVolume = Math.min(1, currentVolume + 0.1);
-            if (bgmAudio) bgmAudio.volume = currentVolume;
-            updateVolumeDisplay();
+            modalConfirmBtn.onclick = closeModal;
+            modalBackdrop.onclick = closeModal;
+
+            modalUI.classList.remove('hidden');
+            modalUI.classList.add('flex');
+
+            const bgmSlider = document.getElementById('bgm-slider');
+            const sfxSlider = document.getElementById('sfx-slider');
+            const bgmLabel = document.getElementById('bgm-volume-label');
+            const sfxLabel = document.getElementById('sfx-volume-label');
+
+            bgmSlider.addEventListener('input', (e) => {
+                bgmVolume = e.target.value / 100;
+                if (bgmAudio) {
+                    bgmAudio.volume = bgmVolume;
+                }
+                bgmLabel.textContent = `${e.target.value}%`;
+            });
+
+            sfxSlider.addEventListener('input', (e) => {
+                sfxVolume = e.target.value / 100;
+                sfxLabel.textContent = `${e.target.value}%`;
+            });
         }
 
         // --- Bluetooth Functions ---
@@ -404,7 +422,7 @@
             if (!bgmAudio) {
                 bgmAudio = new Audio(SOUND_EFFECTS['main-bgm']);
                 bgmAudio.loop = true;
-                bgmAudio.volume = currentVolume;
+                bgmAudio.volume = bgmVolume;
                 bgmAudio.play().catch(e => {
                     console.error("BGMの再生に失敗しました。ユーザー操作後に再試行します。", e);
                     document.body.addEventListener('click', () => bgmAudio.play(), { once: true });
@@ -473,7 +491,7 @@
             let turnContinues = false;
 
             if (isLive) {
-                playSound('shoot-live'); 
+                playSfx('shoot-live'); 
                 const damage = currentPlayer.usedSaw ? 2 : 1;
                 const hpContainerId = targetPlayer.id === currentPlayer.id ? 'my-hp-stars' : `player-hp-${targetPlayer.id}`;
                 const hpContainer = document.getElementById(hpContainerId);
@@ -489,7 +507,7 @@
                 triggerScreenShake('hard');
                 triggerVignetteEffect('blood-splatter');
                 await new Promise(res => setTimeout(res, 1000));
-                playSound('pump-action');
+                playSfx('pump-action');
                 if (targetPlayer.hp <= 0) {
                     targetPlayer.hp = 0;
                     targetPlayer.isAlive = false;
@@ -497,11 +515,11 @@
                 }
                 currentPlayer.usedSaw = false;
             } else {
-                playSound('shoot-blank'); 
+                playSfx('shoot-blank'); 
                 triggerScreenShake('soft');
                 addLog('空砲だった。');
                 await new Promise(res => setTimeout(res, 1000));
-                playSound('pump-action');
+                playSfx('pump-action');
                 if (targetPlayer.id === currentPlayer.id) {
                     addLog('ターンは継続する。', 'action');
                     turnContinues = true;
@@ -576,27 +594,27 @@
 
             switch(itemKey) {
                 case 'saw':
-                    playSound('use-saw');
+                    playSfx('use-saw');
                     currentPlayer.usedSaw = true;
                     await showInfoModal('ノコギリ使用', '次の実弾ダメージが2になります。');
                     break;
                 case 'magnifying-glass':
-                    playSound('use-item-generic');
+                    playSfx('use-item-generic');
                     await showMagnifyingGlassModal();
                     break;
                 case 'cigarette':
-                    playSound('use-item-generic');
+                    playSfx('use-item-generic');
                     if (currentPlayer.hp < currentPlayer.maxHp) {
                         currentPlayer.hp++;
                     }
                     break;
                 case 'handcuffs':
-                    playSound('use-cuffs');
+                    playSfx('use-cuffs');
                     gameState.itemTargetSelection = { itemKey: 'handcuffs' };
                     unlockAction = false; 
                     break;
                 case 'beer':
-                    playSound('use-beer');
+                    playSfx('use-beer');
                     if (gameState.shotgun.chamber.length > 0) {
                         const ejectedShell = gameState.shotgun.chamber.shift();
                         const shellText = ejectedShell === 'live' ? '実弾' : '空砲';
@@ -606,7 +624,7 @@
                     }
                     break;
                 case 'expired-medicine':
-                    playSound('use-item-generic');
+                    playSfx('use-item-generic');
                     triggerScreenShake('soft');
                     const healed = Math.random() < 0.5;
                     if (healed) {
@@ -624,7 +642,7 @@
                     }
                     break;
                 case 'inverter':
-                    playSound('use-item-generic');
+                    playSfx('use-item-generic');
                     if (gameState.shotgun.chamber.length > 0) {
                         gameState.shotgun.chamber.reverse();
                         await showInfoModal('インバータ', '弾倉の中身を反転させた。');
@@ -633,7 +651,7 @@
                     }
                     break;
                 case 'disposable-phone':
-                    playSound('use-item-generic');
+                    playSfx('use-item-generic');
                     if (gameState.shotgun.chamber.length > 1) {
                         const randomIndex = Math.floor(Math.random() * gameState.shotgun.chamber.length);
                         const randomShell = gameState.shotgun.chamber[randomIndex];
@@ -648,7 +666,7 @@
                     }
                     break;
                 case 'adrenaline':
-                    playSound('use-item-generic');
+                    playSfx('use-item-generic');
                     await showInfoModal('アドレナリン', 'このアイテムは現在実装中です。');
                     break;
             }
@@ -766,7 +784,7 @@
 
         function selectTarget(playerId) {
             if (gameState.isActionLocked) return;
-            playSound('select-target');
+            playSfx('select-target');
             selectedTargetId = (selectedTargetId === playerId) ? null : playerId;
             console.log(`ターゲット選択: Player ID ${selectedTargetId}`);
             renderGame();
@@ -830,13 +848,15 @@
 
                 const display = document.getElementById('shell-display-modal');
                 const sortedShells = [...gameState.shotgun.chamber].sort();
+
+                playSfx('load-shell'); // Play sound once at the beginning
+
                 sortedShells.forEach((shellType, i) => {
                     const block = document.createElement('div');
                     block.className = `shell-block ${shellType}`;
                     block.style.width = '35px';
                     block.style.height = '60px';
                     block.style.animationDelay = `${i * 100}ms`;
-                    setTimeout(() => playSound('load-shell'), i * 120);
                     block.classList.add('shell-in-anim');
                     display.appendChild(block);
                 });
@@ -918,7 +938,7 @@
         }
         function triggerScreenShake(intensity) {
             const className = intensity === 'hard' ? 'shake-hard' : 'shake-soft';
-            playSound(intensity === 'hard' ? 'screen-shake-hard' : 'screen-shake-soft');
+            playSfx(intensity === 'hard' ? 'screen-shake-hard' : 'screen-shake-soft');
             document.body.classList.remove('shake-hard', 'shake-soft');
             void document.body.offsetWidth;
             document.body.classList.add(className);
@@ -961,4 +981,3 @@
     </script>
 </body>
 </html>
-
