@@ -232,9 +232,9 @@
         const SOUND_EFFECTS = {
             'main-bgm': 'sounds/main-bgm.mp3',
             'shoot-live': 'sounds/shoot-live.mp3',      
-            'shoot-blank': 'sounds/shoot-blank.mp3',   
-            'load-shell': 'sounds/load-shell.mp3',     
-            'pump-action': 'sounds/pump-action.mp3',   
+            'shoot-blank': 'sounds/shoot-blank.mp3',    
+            'load-shell': 'sounds/load-shell.mp3',      
+            'pump-action': 'sounds/pump-action.mp3',    
             'select-target': 'sounds/select-target.mp3', 
             'use-saw': 'sounds/use-saw.mp3',            
             'use-cuffs': 'sounds/use-cuffs.mp3',        
@@ -531,14 +531,26 @@
                 return;
             }
 
+            // --- 修正箇所 ---
             if (gameState.shotgun.chamber.length === 0) {
                 addLog('弾倉が空になった。', 'info');
                 gameState.isActionLocked = true;
                 renderGame();
                 setTimeout(() => {
-                    startRound(turnContinues ? gameState.currentTurnPlayerIndex : null)
+                    // ターンが継続しない場合 (実弾だった場合、または他人に空砲だった場合)、次のプレイヤーに進める
+                    if (!turnContinues) {
+                        let nextPlayerIndex = (gameState.currentTurnPlayerIndex + 1) % gameState.players.length;
+                        // 生きている次のプレイヤーが見つかるまでループ
+                        while (!gameState.players[nextPlayerIndex].isAlive) {
+                            nextPlayerIndex = (nextPlayerIndex + 1) % gameState.players.length;
+                        }
+                        gameState.currentTurnPlayerIndex = nextPlayerIndex;
+                    }
+                    // ターンが継続する場合 (自分に空砲) はインデックスは変更されず、そのまま新しいラウンドが始まる
+                    startRound();
                 }, 2000);
             } else {
+            // --- 修正ここまで ---
                 if (turnContinues) {
                     gameState.isActionLocked = false;
                     renderGame();
