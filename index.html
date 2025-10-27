@@ -74,8 +74,7 @@
             border-radius: 4px;
             border: 2px solid rgba(0,0,0,0.5);
             margin: 0 4px;
-            /* transitions applied directly in showShellLoadingModal for fade-out */
-            /* transition: background-color 0.5s, transform 0.5s; */
+            transition: background-color 0.5s, transform 0.5s;
         }
         .shell-block.live { background-color: var(--red-color); }
         .shell-block.blank { background-color: var(--blue-color); }
@@ -85,7 +84,7 @@
             from { opacity: 0; transform: translateY(-20px); }
             to { opacity: 1; transform: translateY(0); }
         }
-        /* .shell-in-anim { animation: shell-in 0.3s ease-out forwards; } */ /* Applied via style now */
+        .shell-in-anim { animation: shell-in 0.3s ease-out forwards; }
         
         @keyframes shake-hard { 0%, 100% { transform: translate(0, 0) rotate(0); } 10%, 30%, 50%, 70%, 90% { transform: translate(-25px, 20px) rotate(-8deg); } 20%, 40%, 60%, 80% { transform: translate(25px, -20px) rotate(8deg); } }
         @keyframes shake-soft { 0%, 100% { transform: translate(0, 0); } 25% { transform: translate(-4px, 0px); } 75% { transform: translate(4px, 0px); } }
@@ -230,6 +229,7 @@
         };
         const STAR_SVG = `<svg viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"></path></svg>`;
         
+        // --- 修正箇所: 個別効果音キーの追加 ---
         const SOUND_EFFECTS = {
             'main-bgm': 'sounds/main-bgm.mp3',
             'shoot-live': 'sounds/shoot-live.mp3',      
@@ -240,17 +240,18 @@
             'use-saw': 'sounds/use-saw.mp3',            
             'use-cuffs': 'sounds/use-cuffs.mp3',        
             'use-beer': 'sounds/use-beer.mp3',          
-            'use-item-generic': 'sounds/use-item-generic.mp3', // Fallback
+            'use-item-generic': 'sounds/use-item-generic.mp3', // 汎用効果音も残しておく（必要に応じて）
             'screen-shake-hard': 'sounds/screen-shake-hard.mp3',
             'screen-shake-soft': 'sounds/screen-shake-soft.mp3',
-            // Item-specific SFX keys (paths are placeholders)
+            // アイテムごとの効果音キー (ファイルパスは仮)
             'use-magnifying-glass': 'sounds/use-magnifying-glass.mp3', 
             'use-cigarette': 'sounds/use-cigarette.mp3',
             'use-expired-medicine': 'sounds/use-expired-medicine.mp3',
             'use-inverter': 'sounds/use-inverter.mp3',
             'use-disposable-phone': 'sounds/use-disposable-phone.mp3',
-            // 'use-adrenaline' is intentionally excluded
+            // 'use-adrenaline' は意図的に除外
         };
+        // --- 修正ここまで ---
 
         // --- UI Elements ---
         const lobbyUI = document.getElementById('lobby');
@@ -285,11 +286,11 @@
                 if(gameState.isActionLocked) return;
                 handleShoot(gameState.players[gameState.currentTurnPlayerIndex].id)
             });
-            updatePlayerButtons(); // Initial button state based on default player count
         };
 
         // --- Sound Functions ---
         function playSfx(soundKey) {
+            // 効果音キーが存在しない、またはボリュームが0の場合は再生しない
             if (!SOUND_EFFECTS[soundKey] || sfxVolume <= 0) {
                  if (!SOUND_EFFECTS[soundKey]) {
                      console.warn(`Sound effect key "${soundKey}" not found.`);
@@ -299,10 +300,12 @@
             try {
                 const sound = new Audio(SOUND_EFFECTS[soundKey]);
                 sound.volume = sfxVolume;
+                // play()はPromiseを返すため、catchでエラーを捕捉
                 sound.play().catch(e => console.error(`Error playing sound ${soundKey}:`, e));
             } catch (error) {
                  console.error(`Failed to create or play audio for ${soundKey}:`, error);
             }
+
         }
 
         function showVolumeModal() {
@@ -310,11 +313,11 @@
                 <div class="space-y-4 text-left">
                     <div>
                         <label for="bgm-slider" class="block mb-2">BGM音量: <span id="bgm-volume-label">${Math.round(bgmVolume * 100)}%</span></label>
-                        <input type="range" id="bgm-slider" min="0" max="100" value="${bgmVolume * 100}" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer">
+                        <input type="range" id="bgm-slider" min="0" max="100" value="${bgmVolume * 100}" class="w-full">
                     </div>
                     <div>
                         <label for="sfx-slider" class="block mb-2">効果音音量: <span id="sfx-volume-label">${Math.round(sfxVolume * 100)}%</span></label>
-                        <input type="range" id="sfx-slider" min="0" max="100" value="${sfxVolume * 100}" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer">
+                        <input type="range" id="sfx-slider" min="0" max="100" value="${sfxVolume * 100}" class="w-full">
                     </div>
                 </div>
             `;
@@ -325,7 +328,7 @@
 
             const closeModal = () => {
                 modalUI.classList.add('hidden');
-                modalConfirmBtn.textContent = 'OK'; 
+                modalConfirmBtn.textContent = 'OK'; // Reset for other modals
                 modalBackdrop.onclick = null;
             };
 
@@ -351,220 +354,128 @@
             sfxSlider.addEventListener('input', (e) => {
                 sfxVolume = e.target.value / 100;
                 sfxLabel.textContent = `${e.target.value}%`;
-                 // Play a test sound only when slider interaction ends (mouseup/touchend) for less noise
+                // Optionally play a test sound on slider change
+                // playSfx('select-target');
             });
-             sfxSlider.addEventListener('change', () => { // Fires when value committed
-                 playSfx('select-target'); // Play test sound
-             });
         }
 
         // --- Bluetooth Functions ---
         async function connectBLE() {
-            // Check if Bluetooth is available
-             if (!navigator.bluetooth) {
-                 addLog('Web Bluetooth APIはこのブラウザではサポートされていません。', 'info');
-                 return;
-             }
-
             const SERVICE_UUID = '4fafc201-1fb5-459e-8fcc-c5c9c331914b';
             const CHARACTERISTIC_UUID = 'beb5483e-36e1-4688-b7f5-ea07361b26a8';
 
             try {
-                addLog('BLEデバイスを検索中...', 'info');
+                console.log('BLEデバイスを検索中...');
                 bleDevice = await navigator.bluetooth.requestDevice({
                     filters: [{ services: [SERVICE_UUID] }],
-                    // optionalServices: [] // Add if needed later
                 });
 
-                if (!bleDevice) {
-                     addLog('デバイスが選択されませんでした。', 'info');
-                     return;
-                 }
+                if (bleDevice) {
+                    bleDevice.addEventListener('gattserverdisconnected', onDisconnected);
+                }
 
-
-                bleDevice.addEventListener('gattserverdisconnected', onDisconnected);
-
-                 addLog(`デバイスに接続中: ${bleDevice.name || '不明なデバイス'}`, 'info');
+                console.log('デバイスに接続中...', bleDevice.name);
                 const server = await bleDevice.gatt.connect();
-                 addLog('GATTサーバーに接続しました。', 'info');
                 const service = await server.getPrimaryService(SERVICE_UUID);
-                 addLog('サービスを取得しました。', 'info');
                 bleCharacteristic = await service.getCharacteristic(CHARACTERISTIC_UUID);
-                 addLog('キャラクタリスティックを取得しました。', 'info');
 
-                 addLog('通知を開始します...', 'info');
                 await bleCharacteristic.startNotifications();
                 bleCharacteristic.addEventListener('characteristicvaluechanged', handleNotifications);
 
-                 addLog('BLEコントローラー接続完了！', 'info');
+                console.log('BLEコントローラー接続完了！');
                 connectBleBtn.textContent = '接続済み';
                 connectBleBtn.disabled = true;
-                 reconnectBleBtn.classList.add('hidden'); // Hide reconnect button on success
-
+                reconnectBleBtn.classList.add('hidden');
 
             } catch (error) {
                 console.error('BLE接続エラー:', error);
-                let errorMsg = 'BLE接続に失敗しました。';
-                if (error.name === 'NotFoundError') {
-                     errorMsg = '対応デバイスが見つかりませんでした。';
+                // Avoid using alert for better UX in game context
+                // alert('BLE接続に失敗しました: ' + error);
+                 if (error.name === 'NotFoundError') {
+                     addLog('BLEデバイスが見つかりませんでした。', 'info');
                  } else if (error.name === 'NotAllowedError') {
-                     errorMsg = 'Bluetoothへのアクセス許可が必要です。';
-                 } else if (error.message.includes('User cancelled')) {
-                    errorMsg = 'デバイス選択がキャンセルされました。';
+                     addLog('Bluetoothへのアクセスが許可されませんでした。', 'info');
+                 } else {
+                     addLog('BLE接続に失敗しました。', 'info');
                  }
-                addLog(errorMsg, 'info');
-                 // Ensure buttons are reset if connection fails
-                 connectBleBtn.textContent = 'コントローラー接続';
-                 connectBleBtn.disabled = false;
-                 reconnectBleBtn.classList.add('hidden'); // Ensure hidden on failure too
-                 bleDevice = null; // Clear device ref on failure
-
             }
         }
 
         function onDisconnected(event) {
-            addLog('コントローラーが切断されました。再接続を試みてください。', 'info');
-            bleCharacteristic = null; // Clear characteristic
-            // bleDevice remains to potentially reconnect, but remove listener to prevent duplicates if reconnect fails then retries
-            // if (bleDevice) bleDevice.removeEventListener('gattserverdisconnected', onDisconnected); // Careful with removing listeners
+            console.log('BLEデバイスが切断されました。');
+            addLog('コントローラーが切断されました。', 'info');
+            bleCharacteristic = null;
+            
+            reconnectBleBtn.classList.remove('hidden');
 
-            // Only show reconnect button if game is in progress
-            if (gameState.gameState === 'playing') {
-             reconnectBleBtn.classList.remove('hidden');
-            }
-
-            // Reset main connect button only if not in game? Or always?
-             // Let's reset it always for now.
-             connectBleBtn.textContent = 'コントローラー接続';
-             connectBleBtn.disabled = false;
+            connectBleBtn.textContent = 'コントローラー接続';
+            connectBleBtn.disabled = false;
         }
 
         function handleNotifications(event) {
-            const value = event.target.value; // DataView
+            const value = event.target.value;
             const decoder = new TextDecoder('utf-8');
-            let command = '';
-             try {
-                 command = decoder.decode(value);
-             } catch (error) {
-                 console.error("Error decoding BLE data:", error);
-                 // Handle potential non-UTF8 data if necessary
-                 // Example: Read as bytes
-                 // const bytes = [];
-                 // for (let i = 0; i < value.byteLength; i++) {
-                 //     bytes.push(value.getUint8(i).toString(16).padStart(2, '0'));
-                 // }
-                 // command = `Hex: ${bytes.join(' ')}`;
-                 addLog('受信データデコードエラー', 'info');
-                 return;
-             }
-
+            const command = decoder.decode(value);
             console.log('受信コマンド:', command);
-            addLog(`コントローラー入力: ${command}`, 'info'); // Log received command
 
-
-            // Ensure game is in a state to receive commands and it's the player's turn
+            // Ensure game is in a state to receive commands
             if (gameState.gameState !== 'playing' || gameState.isActionLocked) {
                  console.log('Game not ready for BLE command or action locked.');
-                 playSfx('select-target'); // Play an 'error' or 'busy' sound
-                 triggerScreenShake('soft'); // Give feedback
                  return;
              }
 
 
             if (command === 'fire') {
                 if (selectedTargetId === null) {
-                    addLog('ターゲットが選択されていません。', 'action');
-                    triggerScreenShake('soft'); 
-                    playSfx('select-target'); // Use as feedback for no target
+                    console.log('ターゲットが選択されていません');
+                    triggerScreenShake('soft'); // Provide feedback
+                     playSfx('select-target'); // Play a failure/selection sound maybe?
                     return;
                 }
-                addLog(`コントローラーで発射！ターゲット: ${gameState.players.find(p => p.id === selectedTargetId)?.name || '不明'}`, 'action');
+                console.log(`選択されたターゲット (ID: ${selectedTargetId}) を撃ちます`);
                 handleShoot(selectedTargetId);
-                // selectedTargetId is reset within handleShoot after firing
+                selectedTargetId = null; // Reset target after firing
             }
-             // --- Example: Add target selection via BLE ---
-             else if (command === 'target_next') {
-                 selectNextTarget();
-                 playSfx('select-target');
-                 renderGame(); // Update highlight
-             } else if (command === 'target_prev') {
-                 selectPrevTarget();
-                 playSfx('select-target');
-                 renderGame();
-             } else if (command === 'target_self') {
-                 selectTarget(gameState.players[gameState.currentTurnPlayerIndex].id);
-                 playSfx('select-target');
-                 renderGame();
-             }
-            // Add more commands (use_item, specific item triggers?)
-            else {
-                 addLog(`未定義のコマンド受信: ${command}`, 'info');
-             }
+             // Add more commands here if needed, e.g., 'select_next_target', 'use_item'
+             // else if (command === 'select_next_target') { ... }
         }
-
-         // --- Helper functions for BLE target selection ---
-         function getAliveOpponentIds() {
-             const currentPlayerId = gameState.players[gameState.currentTurnPlayerIndex].id;
-             return gameState.players
-                 .filter(p => p.isAlive && p.id !== currentPlayerId)
-                 .map(p => p.id);
-         }
-
-         function selectNextTarget() {
-             const aliveOpponentIds = getAliveOpponentIds();
-             if (aliveOpponentIds.length === 0) return; // No opponents to target
-
-             const currentPlayerId = gameState.players[gameState.currentTurnPlayerIndex].id;
-             const targettableIds = [currentPlayerId, ...aliveOpponentIds]; // Include self
-
-             let currentTargetIndex = targettableIds.indexOf(selectedTargetId);
-
-             // If nothing selected, or current target is invalid/not in list, start from self
-             if (currentTargetIndex === -1) {
-                 selectedTargetId = targettableIds[0]; // Default to self
-             } else {
-                 // Move to the next ID in the list, wrap around
-                 selectedTargetId = targettableIds[(currentTargetIndex + 1) % targettableIds.length];
-             }
-             console.log(`BLE Target Next: ${selectedTargetId}`);
-         }
-
-          function selectPrevTarget() {
-             const aliveOpponentIds = getAliveOpponentIds();
-             if (aliveOpponentIds.length === 0) return;
-
-             const currentPlayerId = gameState.players[gameState.currentTurnPlayerIndex].id;
-             const targettableIds = [currentPlayerId, ...aliveOpponentIds]; // Include self
-
-             let currentTargetIndex = targettableIds.indexOf(selectedTargetId);
-
-             if (currentTargetIndex === -1) {
-                 selectedTargetId = targettableIds[targettableIds.length - 1]; // Default to last opponent
-             } else {
-                 // Move to the previous ID, wrap around
-                 selectedTargetId = targettableIds[(currentTargetIndex - 1 + targettableIds.length) % targettableIds.length];
-             }
-             console.log(`BLE Target Prev: ${selectedTargetId}`);
-         }
-
         
         // --- Game Logic ---
+        function addLog(message, type = 'normal') {
+            const logEntry = document.createElement('p');
+            let colorClass = 'text-gray-400';
+            if (type === 'action') colorClass = 'text-yellow-300';
+            if (type === 'damage') colorClass = 'text-red-400';
+            if (type === 'info') colorClass = 'text-blue-300';
+            logEntry.className = `${colorClass} transition-opacity duration-300 ease-out opacity-0`; // Add transition classes
+            logEntry.innerHTML = message;
+            gameLogUI.appendChild(logEntry);
+             // Trigger fade-in effect
+            requestAnimationFrame(() => {
+                logEntry.classList.remove('opacity-0');
+            });
+            // Auto-scroll with smooth behavior if possible
+             gameLogUI.scrollTo({ top: gameLogUI.scrollHeight, behavior: 'smooth' });
+             // Fallback for older browsers
+             // gameLogUI.scrollTop = gameLogUI.scrollHeight;
+        }
+
         function startGame() {
             const playerInputs = document.querySelectorAll('.player-name-input');
             const playerNames = Array.from(playerInputs).map(input => input.value.trim()).filter(name => name);
             if (playerNames.length < 2) { lobbyErrorUI.textContent = '少なくとも2人のプレイヤー名を入力してください。'; return; }
             if (new Set(playerNames).size !== playerNames.length) { lobbyErrorUI.textContent = 'プレイヤー名は重複しないようにしてください。'; return; }
 
-            lobbyErrorUI.textContent = ''; // Clear error on success
-
-            if (!bgmAudio || bgmAudio.paused || bgmAudio.ended) {
-                if (!bgmAudio) { 
+            // Start BGM only if it's not already playing or has ended
+             if (!bgmAudio || bgmAudio.paused || bgmAudio.ended) {
+                if (!bgmAudio) { // Create if it doesn't exist
                     bgmAudio = new Audio(SOUND_EFFECTS['main-bgm']);
                     bgmAudio.loop = true;
                 }
                  bgmAudio.volume = bgmVolume;
                  bgmAudio.play().catch(e => {
                     console.error("BGMの再生に失敗しました。ユーザー操作後に再試行します。", e);
+                    // Add listener to body, more reliable than a specific button if user clicks elsewhere
                      document.body.addEventListener('click', () => {
                          if (bgmAudio && bgmAudio.paused) { bgmAudio.play(); }
                       }, { once: true });
@@ -572,117 +483,139 @@
              }
 
             gameState = {
-                players: playerNames.map((name, index) => ({ id: index, name: name, hp: 4, maxHp: 4, isAlive: true, usedSaw: false, isHandcuffed: false /*, items: [] */ })), // Add items array if implementing inventory
+                players: playerNames.map((name, index) => ({ id: index, name: name, hp: 4, maxHp: 4, isAlive: true, usedSaw: false, isHandcuffed: false })),
                 gameState: 'playing',
-                currentTurnPlayerIndex: Math.floor(Math.random() * playerNames.length), // Start with random player
+                currentTurnPlayerIndex: 0,
                 shotgun: { chamber: [] },
-                itemTargetSelection: null, // Stores { itemKey: 'key' } when targeting
+                itemTargetSelection: null,
                 roundNumber: 0,
-                isActionLocked: true, // Start locked until first turn transition
+                isActionLocked: false,
             };
             
-            gameLogUI.innerHTML = ''; 
+            gameLogUI.innerHTML = ''; // Clear previous logs
             addLog('ゲーム開始！', 'info');
-             addLog(`最初のターンは ${gameState.players[gameState.currentTurnPlayerIndex].name} です。`, 'info');
-
 
             lobbyUI.classList.remove('flex');
             lobbyUI.classList.add('hidden');
             gameContainerUI.classList.remove('hidden');
-             // Show reconnect button immediately if BLE was connected before starting
-             if (bleDevice && !reconnectBleBtn.classList.contains('hidden')) {
-                 reconnectBleBtn.classList.remove('hidden');
-             }
-            startRound(); // This will lead to showTurnTransition which unlocks actions
+            startRound();
         }
 
         function startRound() {
             gameState.roundNumber++;
-            const numPlayers = gameState.players.length; // Use actual player count
-            const baseShells = numPlayers >= 4 ? 4 : (numPlayers === 3 ? 3 : 2); // Adjust base shells based on player count (example: 2p=2, 3p=3, 4p=4)
-            const totalShells = Math.min(8, baseShells + (gameState.roundNumber - 1)); // Increase shells per round, max 8
+            const baseShells = gameState.players.length >= 4 ? 4 : 3;
+            // Ensure totalShells doesn't exceed a reasonable max, e.g., 8
+            const totalShells = Math.min(8, baseShells + (gameState.roundNumber - 1)); 
             
             let liveRounds;
             let blankRounds;
 
+            // Ensure at least one blank if possible, and at least one live unless totalShells is 1
              if (totalShells <= 1) {
-                 liveRounds = Math.random() < 0.5 ? 1 : 0; 
+                 liveRounds = Math.random() < 0.5 ? 1 : 0; // 50/50 for 1 shell
              } else {
-                 // Aim for roughly 50/50 split, but ensure at least one of each if total >= 2
-                 const minLive = 1;
-                 const maxLive = totalShells - 1;
-                 // Generate a random number biased towards the middle if desired, or simple random:
-                 liveRounds = Math.floor(Math.random() * (maxLive - minLive + 1)) + minLive; 
+                 // Ensure at least 1 live and 1 blank
+                 liveRounds = Math.floor(Math.random() * (totalShells - 1)) + 1; // 1 to totalShells-1
              }
              blankRounds = totalShells - liveRounds;
 
-             let chamber = Array(liveRounds).fill('live').concat(Array(blankRounds).fill('blank'));
-             // The actual shuffle happens later in showShellLoadingModal AFTER visual shuffle
-             // for (let i = chamber.length - 1; i > 0; i--) { ... } 
 
-             // Store the intended counts before visual modal shuffles the array copy
-            gameState.shotgun = { chamber, intendedLive: liveRounds, intendedBlank: blankRounds }; 
-            
-            // Log counts based on intended values
-            addLog(`ラウンド ${gameState.roundNumber}: ${liveRounds}実弾, ${blankRounds}空砲 装填準備...`, 'info'); 
-            gameState.players.forEach(p => { p.usedSaw = false; }); // Reset saw status
-             // Reset cuffs maybe? Or let them persist across rounds? Let's keep them persistent for now.
-             // gameState.players.forEach(p => { p.isHandcuffed = false; }); 
-            displayAndScrambleShells(); 
+            // Create and shuffle the chamber
+             let chamber = Array(liveRounds).fill('live').concat(Array(blankRounds).fill('blank'));
+             // Fisher-Yates (Knuth) Shuffle for better randomness
+             for (let i = chamber.length - 1; i > 0; i--) {
+                 const j = Math.floor(Math.random() * (i + 1));
+                 [chamber[i], chamber[j]] = [chamber[j], chamber[i]];
+             }
+
+
+            addLog(`ラウンド ${gameState.roundNumber}: ${liveRounds}実弾, ${blankRounds}空砲 装填完了。`, 'info'); // Log shell counts
+            gameState.shotgun = { chamber };
+            // Reset saw status at the start of each round
+            gameState.players.forEach(p => { p.usedSaw = false; }); 
+            displayAndScrambleShells(); // This handles the modal and shuffling animation
         }
 
         async function displayAndScrambleShells() {
-            // Pass intended counts to modal for accurate display before visual shuffle
-            await showShellLoadingModal(gameState.shotgun.intendedLive, gameState.shotgun.intendedBlank); 
-            // The actual gameState.shotgun.chamber is shuffled within showShellLoadingModal now
-            showTurnTransition(); // Transition to the current player's turn
+            await showShellLoadingModal(); // Shows counts, then hides them for shuffle animation
+            // Transition to the first player's turn after modal closes
+            showTurnTransition(); 
         }
 
         async function handleShoot(targetPlayerId) {
             if (gameState.isActionLocked) return;
             gameState.isActionLocked = true;
-            renderGame(); 
+            renderGame(); // Update UI to disable buttons
 
             const currentPlayer = gameState.players[gameState.currentTurnPlayerIndex];
             const targetPlayer = gameState.players.find(p => p.id === targetPlayerId);
-             if (!targetPlayer) { /* ... error handling ... */ return; }
-             if (gameState.shotgun.chamber.length === 0) { /* ... error handling ... */ return; }
+             if (!targetPlayer) {
+                 console.error(`Target player with ID ${targetPlayerId} not found.`);
+                 gameState.isActionLocked = false; // Unlock if target is invalid
+                 renderGame();
+                 return;
+             }
 
-            const shell = gameState.shotgun.chamber.shift(); 
+             if (gameState.shotgun.chamber.length === 0) {
+                 addLog("エラー: 弾倉が空です。", "info");
+                 gameState.isActionLocked = false;
+                 renderGame();
+                 // Optionally start a new round here or handle the empty chamber state
+                 // startRound(); // Example: Immediately start new round if empty (might need adjustment)
+                 return;
+             }
+
+
+            const shell = gameState.shotgun.chamber.shift(); // Remove shell from the front
             const isLive = shell === 'live';
             
-            addLog(`${currentPlayer.name}が${targetPlayer.name}に発砲...`);
-            let turnContinues = false; 
+            addLog(`${currentPlayer.name}が${targetPlayer.name}を撃った...`);
 
-             await new Promise(res => setTimeout(res, 500)); // Suspense
+            let turnContinues = false; // Default: turn does not continue
+
+            // Short delay before revealing outcome
+             await new Promise(res => setTimeout(res, 500));
+
 
             if (isLive) {
                 playSfx('shoot-live'); 
                 const damage = currentPlayer.usedSaw ? 2 : 1;
                 
+                // Animate HP loss visually first
                 const hpContainerId = targetPlayer.id === currentPlayer.id ? 'my-hp-stars' : `player-hp-${targetPlayer.id}`;
                 const hpContainer = document.getElementById(hpContainerId);
-                if (hpContainer) { /* ... animate stars ... */ }
+                if (hpContainer) {
+                    const stars = hpContainer.querySelectorAll('span:not(.text-gray-600)'); // Select only filled stars
+                    for (let i = 0; i < damage; i++) {
+                        if (stars.length > i) {
+                            // Apply animation to the last filled stars
+                            stars[stars.length - 1 - i].classList.add('star-out-anim');
+                        }
+                    }
+                 }
                 
+                // Wait for animation slightly before updating state and log
                  await new Promise(res => setTimeout(res, 300));
 
                 targetPlayer.hp -= damage;
-                 if (targetPlayer.hp < 0) targetPlayer.hp = 0; // Prevent negative HP display
-                addLog(`実弾！ ${targetPlayer.name}は${damage}ダメージ！ (残りHP: ${targetPlayer.hp})`, 'damage');
+                addLog(`実弾！ ${targetPlayer.name}は${damage}ダメージを受けた。`, 'damage');
                 triggerScreenShake('hard');
                 triggerVignetteEffect('blood-splatter');
                 
-                await new Promise(res => setTimeout(res, 700)); 
-                playSfx('pump-action'); 
+                await new Promise(res => setTimeout(res, 700)); // Slightly longer pause after hit
+
+                playSfx('pump-action'); // Play pump after hit feedback
 
                 if (targetPlayer.hp <= 0) {
+                    targetPlayer.hp = 0; // Ensure HP doesn't go negative
                     targetPlayer.isAlive = false;
                     addLog(`${targetPlayer.name}は倒れた...`, 'damage');
-                    renderGame(); // Update immediately to show defeat
+                     // Render immediately to show player defeated state
+                    renderGame();
                 }
-                currentPlayer.usedSaw = false; 
-                 // turnContinues remains false
-            } else { // Blank
+                currentPlayer.usedSaw = false; // Reset saw after use (whether hit or miss conceptually)
+                 // Live shot means turn always ends (turnContinues remains false)
+            } else { // Blank shot
                 playSfx('shoot-blank'); 
                 triggerScreenShake('soft');
                 addLog('空砲だった。');
@@ -690,206 +623,319 @@
                 await new Promise(res => setTimeout(res, 1000));
                 playSfx('pump-action');
 
-                if (targetPlayer.id === currentPlayer.id) { 
-                    addLog('ターン継続！', 'action');
-                    turnContinues = true; 
+                if (targetPlayer.id === currentPlayer.id) { // Shot self with blank
+                    addLog('ターンは継続する。', 'action');
+                    turnContinues = true; // Only case where turn continues
                 }
-                 // turnContinues remains false if blank on opponent
+                 // If shot opponent with blank, turn ends (turnContinues remains false)
             }
             
-            selectedTargetId = null; // Reset target highlight
+             // Always reset target selection after a shot attempt
+            selectedTargetId = null;
 
-             if (checkGameOver()) return; // Check after state updates
+            // Check game over *after* state update and rendering defeated player
+             if (checkGameOver()) {
+                 // Game over modal is shown by checkGameOver, no need to unlock actions
+                 return;
+             }
 
+
+            // Handle next step: New round or next turn
             if (gameState.shotgun.chamber.length === 0) {
-                addLog('弾倉が空になりました。', 'info');
-                renderGame(); 
+                addLog('弾倉が空になった。', 'info');
+                // Action remains locked (gameState.isActionLocked = true)
+                renderGame(); // Show empty chamber state if desired
                 setTimeout(() => {
+                    // Decide next player *before* starting the round
                     if (!turnContinues) {
                         let nextPlayerIndex = (gameState.currentTurnPlayerIndex + 1) % gameState.players.length;
-                        while (!gameState.players[nextPlayerIndex].isAlive) { /* ... find next alive ... */ }
-                        gameState.currentTurnPlayerIndex = nextPlayerIndex; 
+                        while (!gameState.players[nextPlayerIndex].isAlive) {
+                            nextPlayerIndex = (nextPlayerIndex + 1) % gameState.players.length;
+                        }
+                        gameState.currentTurnPlayerIndex = nextPlayerIndex; // Update turn index for the new round
                     }
+                    // Start the new round (state will be unlocked within showTurnTransition)
                     startRound(); 
-                }, 2000); 
-            } else { 
+                }, 2000); // Wait before starting next round
+            } else { // Shells remaining
                 if (turnContinues) {
+                    // Stay on current player, unlock actions
                     gameState.isActionLocked = false;
-                    renderGame(); 
+                    renderGame(); // Re-render to enable buttons
                 } else {
+                    // Move to the next player (state will be unlocked within showTurnTransition)
                     endTurn(); 
                 }
             }
         }
 
-        async function endTurn(forceNextPlayerId = null) { 
+        async function endTurn(forceNextPlayerId = null) { // Allow forcing a specific player (e.g., after adrenaline?)
             let nextPlayerIndex;
-            // --- Determine next player index ---
-             if (forceNextPlayerId !== null) { /* ... handle forced player ... */ }
-             if (forceNextPlayerId === null) { nextPlayerIndex = (gameState.currentTurnPlayerIndex + 1) % gameState.players.length; }
 
-            let initialIndex = nextPlayerIndex; 
+             if (forceNextPlayerId !== null) {
+                 const forcedIndex = gameState.players.findIndex(p => p.id === forceNextPlayerId);
+                 if (forcedIndex !== -1 && gameState.players[forcedIndex].isAlive) {
+                     nextPlayerIndex = forcedIndex;
+                 } else {
+                      console.warn(`Forced player ID ${forceNextPlayerId} not found or not alive. Proceeding normally.`);
+                     forceNextPlayerId = null; // Reset if invalid
+                 }
+             }
 
-            // --- Find next valid player (alive and not cuffed) ---
+             if (forceNextPlayerId === null) {
+                nextPlayerIndex = (gameState.currentTurnPlayerIndex + 1) % gameState.players.length;
+             }
+
+
+            let initialIndex = nextPlayerIndex; // To detect full loop
+
             while (true) {
                 const nextPlayer = gameState.players[nextPlayerIndex];
                 
-                if (!nextPlayer || !nextPlayer.isAlive) { // Added check for undefined player
+                if (!nextPlayer.isAlive) {
                     nextPlayerIndex = (nextPlayerIndex + 1) % gameState.players.length;
                  } else if (nextPlayer.isHandcuffed) {
-                    nextPlayer.isHandcuffed = false; // Cuffs removed for *next* turn
+                    nextPlayer.isHandcuffed = false; // Remove cuffs for their *next* turn
                     addLog(`${nextPlayer.name}は手錠で動けない！ ターンをスキップ。`, 'action');
-                     renderGame(); // Update UI to show cuffs visually removed (or add icon change)
+                     // Render to show cuffs removed visually if desired
+                     renderGame();
                     await showInfoModal(`${nextPlayer.name}は手錠をかけられている！`, 'ターンはスキップされます。');
                     nextPlayerIndex = (nextPlayerIndex + 1) % gameState.players.length;
                 } else {
-                    break; // Found valid player
+                    // Found the next valid player
+                    break; 
                 }
 
-                 // Safety break (unchanged)
-                 if (nextPlayerIndex === initialIndex && (!gameState.players[nextPlayerIndex] || (!gameState.players[nextPlayerIndex].isAlive && !gameState.players[nextPlayerIndex].isHandcuffed))) {
+                // Safety break: if we looped through everyone and found no valid player (shouldn't happen if checkGameOver works)
+                 if (nextPlayerIndex === initialIndex && !gameState.players[nextPlayerIndex].isAlive && !gameState.players[nextPlayerIndex].isHandcuffed) {
                      console.error("Looped through all players without finding a valid next turn.");
+                     // Handle this potentially game-breaking state, maybe force game over?
                      showModal("エラー", "次のプレイヤーが見つかりません。", () => window.location.reload());
                      return; 
                  }
             }
 
             gameState.currentTurnPlayerIndex = nextPlayerIndex;
-            if (!checkGameOver()) { showTurnTransition(); }
+            
+            // Check game over again *before* transition, although likely caught earlier
+            if (!checkGameOver()) { 
+                showTurnTransition(); // This will unlock actions after modal confirmation
+            }
         }
 
+        // --- 修正箇所: useItem 関数の効果音呼び出し ---
         async function useItem(itemKey) {
             if (gameState.isActionLocked) return;
             gameState.isActionLocked = true;
-            renderGame(); 
+            renderGame(); // Disable buttons while processing item
             
             const currentPlayer = gameState.players[gameState.currentTurnPlayerIndex];
-            addLog(`${currentPlayer.name}が${ITEMS[itemKey].name}を使用。`, 'action');
+            addLog(`${currentPlayer.name}が${ITEMS[itemKey].name}を使用した。`, 'action');
 
-            let unlockAction = true; 
-            let sfxKey = `use-${itemKey}`; 
+            let unlockAction = true; // Assume action unlocks unless item needs target selection
 
+            // Play SFX based on item key (except adrenaline)
+            let sfxKey = `use-${itemKey}`; // Construct the key
              if (itemKey !== 'adrenaline') {
-                 if (SOUND_EFFECTS[sfxKey]) { playSfx(sfxKey); }
-                 // Simplified check as saw, cuffs, beer are now in the format use-X
-                 else if (!SOUND_EFFECTS[`use-${itemKey}`]) { 
-                      console.warn(`No specific sound effect found for key: ${sfxKey}. Using generic.`);
-                      playSfx('use-item-generic'); // Fallback SFX
+                 // Use specific key if it exists, otherwise fallback? (Currently no fallback needed as all have keys or are excluded)
+                 if (SOUND_EFFECTS[sfxKey]) {
+                     playSfx(sfxKey);
+                 } else if (itemKey === 'saw' || itemKey === 'cuffs' || itemKey === 'beer') {
+                     // These already have specific keys defined at the top level
+                     playSfx(`use-${itemKey}`); 
+                 }
+                  else {
+                      console.warn(`No specific sound effect found for key: ${sfxKey}. Consider adding it to SOUND_EFFECTS.`);
+                      // playSfx('use-item-generic'); // Optional: Play generic if specific not found
                   }
              }
 
+
+            // Item logic
             switch(itemKey) {
                 case 'saw':
+                    // playSfx('use-saw'); // Moved above switch
                     currentPlayer.usedSaw = true;
-                    await showInfoModal('ノコギリ', '次の実弾ダメージが2倍になります。');
+                    await showInfoModal('ノコギリ使用', '次の実弾ダメージが2になります。');
                     break;
                 case 'magnifying-glass':
+                    // playSfx('use-magnifying-glass'); // Moved above switch
                     await showMagnifyingGlassModal();
                     break;
                 case 'cigarette':
+                    // playSfx('use-cigarette'); // Moved above switch
                     if (currentPlayer.hp < currentPlayer.maxHp) {
                         currentPlayer.hp++;
-                         addLog(`${currentPlayer.name}のHPが1回復した。`, 'info'); 
-                    } else { addLog(`${currentPlayer.name}はすでにHPが最大だ。`, 'info'); }
-                    renderGame(); 
-                    await new Promise(res => setTimeout(res, 500));
+                         addLog(`${currentPlayer.name}のHPが1回復した。`, 'info'); // Log HP gain
+                    } else {
+                         addLog(`${currentPlayer.name}はすでにHPが最大だ。`, 'info');
+                     }
+                    // Short delay to see HP update?
+                     renderGame(); // Update UI immediately
+                     await new Promise(res => setTimeout(res, 500));
                     break;
                 case 'handcuffs':
-                    addLog('誰に手錠をかけますか？(自分以外)', 'action');
+                    // playSfx('use-cuffs'); // Moved above switch
+                    addLog('誰に手錠をかけますか？');
                     gameState.itemTargetSelection = { itemKey: 'handcuffs' };
-                    unlockAction = false; 
+                    unlockAction = false; // Action locked until target selected
                     break;
                 case 'beer':
+                    // playSfx('use-beer'); // Moved above switch
                     if (gameState.shotgun.chamber.length > 0) {
-                        const ejectedShell = gameState.shotgun.chamber.shift(); 
+                        const ejectedShell = gameState.shotgun.chamber.shift(); // Eject from front
                         const shellText = ejectedShell === 'live' ? '実弾' : '空砲';
-                         addLog(`ビールを飲み、弾を排出... (${shellText})`, 'action');
-                        await showInfoModal('ビール', `弾を1つ排出した... (${shellText})`);
-                    } else { /* ... handle empty ... */ }
-                    renderGame(); 
+                         addLog(`ビールを飲んで弾を1つ排出した... (${shellText})`, 'action');
+                        await showInfoModal('ビール使用', `弾を1つ排出した... (${shellText})`);
+                    } else {
+                         addLog('ビールを飲もうとしたが、弾倉は空だった。', 'info');
+                        await showInfoModal('ビール使用', '弾倉は空だった。');
+                    }
+                     renderGame(); // Update shell display if shown
                     break;
                 case 'expired-medicine':
+                    // playSfx('use-expired-medicine'); // Moved above switch
                     triggerScreenShake('soft');
-                    const healed = Math.random() < 0.5; 
-                    if (healed) { /* ... heal logic ... */ } 
-                    else { /* ... damage logic ... */ }
-                    renderGame(); 
-                    await new Promise(res => setTimeout(res, 500)); 
-                    if (currentPlayer.hp <= 0) { /* ... handle death ... */ unlockAction = false; }
+                    const healed = Math.random() < 0.5; // 50% chance
+                    if (healed) {
+                        const hpBefore = currentPlayer.hp;
+                        currentPlayer.hp = Math.min(currentPlayer.maxHp, currentPlayer.hp + 2);
+                         const gained = currentPlayer.hp - hpBefore;
+                         addLog(`薬は効いた！ HPが${gained}回復した。`, 'info');
+                        await showInfoModal('期限切れ薬', `ライフが${gained}回復した！`);
+                    } else {
+                        currentPlayer.hp--;
+                         addLog('薬は逆効果だった... HPが1減少した。', 'damage');
+                        await showInfoModal('期限切れ薬', 'ライフが1減少した...');
+                    }
+                    renderGame(); // Update HP display
+                     await new Promise(res => setTimeout(res, 500)); // Pause to see result
+
+                    if (currentPlayer.hp <= 0) {
+                        currentPlayer.hp = 0;
+                        currentPlayer.isAlive = false;
+                        addLog(`${currentPlayer.name}は薬の副作用で倒れた...`, 'damage');
+                        renderGame(); // Show defeated state
+                        checkGameOver(); // Trigger game over check
+                         unlockAction = false; // Don't unlock if player died from item
+                    }
                     break;
                 case 'inverter':
-                    if (gameState.shotgun.chamber.length > 1) { 
+                    // playSfx('use-inverter'); // Moved above switch
+                    if (gameState.shotgun.chamber.length > 1) { // Need at least 2 shells to invert
                         gameState.shotgun.chamber.reverse();
-                         addLog('弾倉の中身を反転！', 'action');
-                        await showInfoModal('インバータ', '弾倉の中身を反転させました。');
-                    } else { /* ... handle few shells ... */ }
+                         addLog('弾倉の中身を反転させた！', 'action');
+                        await showInfoModal('インバータ', '弾倉の中身を反転させた。');
+                    } else {
+                         addLog('弾倉の弾が少なすぎて反転できなかった。', 'info');
+                        await showInfoModal('インバータ', '弾倉の弾が少なすぎて使えなかった。');
+                    }
+                     // Update visual shell display if necessary (currently shells aren't shown during turn)
                     break;
                 case 'disposable-phone':
-                    if (gameState.shotgun.chamber.length > 0) { 
-                        const randomIndex = Math.floor(Math.random() * gameState.shotgun.chamber.length); 
+                    // playSfx('use-disposable-phone'); // Moved above switch
+                    if (gameState.shotgun.chamber.length > 0) { // Can check even with 1 shell
+                        const randomIndex = Math.floor(Math.random() * gameState.shotgun.chamber.length);
                         const randomShell = gameState.shotgun.chamber[randomIndex];
                         const shellText = randomShell === 'live' ? `<span class="text-red-500">実弾</span>` : `<span class="text-blue-500">空砲</span>`;
-                        let noisyText = `[雑音]...残弾 ${randomIndex + 1} 発目...[雑音]...種類: ${shellText}...[接続不良]`; 
-                         addLog(`電話で残弾${randomIndex + 1}発目の種類を確認... (${randomShell})`, 'action');
+                        // Make the output slightly more cryptic/noisy
+                        let noisyText = `[雑音]...${randomIndex + 1}番目...[雑音]...タイプ: ${shellText}...[切断]`;
+                         addLog(`電話で${randomIndex + 1}番目の弾の種類を確認した... (${randomShell})`, 'action');
                         await showInfoModal('使い捨て携帯', noisyText);
-                    } else { /* ... handle empty ... */ }
+                    } else {
+                         addLog('電話を使おうとしたが、弾倉は空だった。', 'info');
+                        await showInfoModal('使い捨て携帯', '弾倉は空だった。');
+                    }
                     break;
                 case 'adrenaline':
-                     addLog('アドレナリン！ (効果実装中)', 'action');
+                    // No SFX here as requested
+                     addLog('アドレナリンを使用！ (効果実装中)', 'action');
                     await showInfoModal('アドレナリン', 'このアイテムは現在実装中です。');
+                     // Placeholder for future logic: maybe steal an item? target selection needed.
+                     // gameState.itemTargetSelection = { itemKey: 'adrenaline' };
+                     // unlockAction = false;
                     break;
-                 default: /* ... handle unknown ... */ break;
+                 default:
+                     console.warn(`Unknown item key used: ${itemKey}`);
+                     playSfx('use-item-generic'); // Fallback SFX for unknown items
+                     await showInfoModal('不明なアイテム', 'このアイテムの効果は不明です。');
+                     break;
             }
             
-             if (unlockAction && gameState.gameState === 'playing') { 
+            // Re-enable actions if the item use is complete and didn't lock for targeting
+             if (unlockAction && gameState.gameState === 'playing') { // Ensure game didn't end
                 gameState.isActionLocked = false;
                 renderGame();
              } else if (gameState.itemTargetSelection) {
-                 renderGame(); // Update to show targetable state
+                 // If item requires targeting, update render to show targetable state
+                 renderGame();
              }
         }
+        // --- 修正ここまで ---
         
         function handleTargetSelection(targetPlayerId) {
+             // Ensure itemTargetSelection is active
             if (!gameState.itemTargetSelection || gameState.isActionLocked) return;
-             gameState.isActionLocked = true; // Lock during processing
+
+             // Lock action temporarily during processing
+             gameState.isActionLocked = true;
+
 
             const { itemKey } = gameState.itemTargetSelection;
             const targetPlayer = gameState.players.find(p => p.id === targetPlayerId);
             const currentPlayer = gameState.players[gameState.currentTurnPlayerIndex];
 
-             if (!targetPlayer || !targetPlayer.isAlive) { /* ... handle invalid target ... */ return; }
+             if (!targetPlayer || !targetPlayer.isAlive) {
+                 addLog("無効なターゲットです。", "info");
+                 gameState.isActionLocked = false; // Unlock if target invalid
+                 gameState.itemTargetSelection = null; // Cancel item use
+                 renderGame();
+                 return;
+             }
+
 
             if (itemKey === 'handcuffs') {
+                 // Prevent cuffing self? Or allow? Current allows.
                 if (targetPlayer.id === currentPlayer.id) {
-                     addLog("自分には手錠をかけられません。", "info");
-                     gameState.isActionLocked = false; 
-                     gameState.itemTargetSelection = null; 
+                     addLog("自分自身に手錠はかけられない。", "info");
+                     // Optional: play a 'fail' sound?
+                     gameState.isActionLocked = false;
+                     gameState.itemTargetSelection = null;
                      renderGame();
                      return;
                  }
-                // Check if target is already cuffed? (Maybe allow stacking or just ignore)
-                 if (targetPlayer.isHandcuffed) {
-                     addLog(`${targetPlayer.name}はすでに手錠をかけられています。`, 'info');
-                 } else {
-                     targetPlayer.isHandcuffed = true;
-                     addLog(`${currentPlayer.name}が${targetPlayer.name}に手錠をかけた！`, 'action');
-                     triggerScreenShake('soft'); 
-                     playSfx('use-cuffs'); 
-                 }
-            }
-             // else if (itemKey === 'adrenaline') { /* ... adrenaline target logic ... */ }
 
-            gameState.itemTargetSelection = null; 
-            gameState.isActionLocked = false; 
-            renderGame(); 
+                targetPlayer.isHandcuffed = true;
+                addLog(`${currentPlayer.name}が${targetPlayer.name}に手錠をかけた！ 次のターンはスキップされる。`, 'action');
+                triggerScreenShake('soft'); // Handcuff feedback
+                 playSfx('use-cuffs'); // Play sound on successful application
+            }
+             // Add logic for other targetable items here (like adrenaline if implemented)
+             // else if (itemKey === 'adrenaline') { ... steal item logic ... }
+
+
+            gameState.itemTargetSelection = null; // Clear targeting state
+            gameState.isActionLocked = false; // Unlock actions
+            renderGame(); // Update UI
         }
 
         function checkGameOver() {
             const alivePlayers = gameState.players.filter(p => p.isAlive);
             if (alivePlayers.length <= 1) {
-                 if (gameState.gameState !== 'finished') { 
+                 if (gameState.gameState !== 'finished') { // Prevent multiple modals
                     gameState.gameState = 'finished';
-                    // ... (rest of game over logic) ...
+                    const winner = alivePlayers[0];
+                    const title = winner ? `${winner.name}の勝利！` : '引き分け！';
+                    const content = winner ? 'おめでとうございます！' : '勝者はいませんでした。';
+                    if (winner) {
+                        addLog(`ゲーム終了！ ${winner.name}の勝利！`, 'info');
+                     } else {
+                         addLog('ゲーム終了！ 引き分け！', 'info');
+                     }
+                    // Delay modal slightly to let final logs appear
+                     setTimeout(() => {
+                        showModal(title, content, () => { window.location.reload(); });
+                     }, 1500);
                  }
                 return true;
             }
@@ -897,167 +943,569 @@
         }
 
         function renderGame() {
+            // Do not render if game state is already finished to avoid conflicts with game over modal
             if (gameState.gameState === 'finished') return; 
-             if (!gameState || !gameState.players || typeof gameState.currentTurnPlayerIndex === 'undefined') { /* ... error handling ... */ return; }
+
+            // Ensure gameState and players exist
+             if (!gameState || !gameState.players || typeof gameState.currentTurnPlayerIndex === 'undefined') {
+                 console.error("RenderGame called with invalid gameState.");
+                 // Maybe redirect to lobby or show an error
+                 // window.location.reload();
+                 return;
+             }
+
             const currentPlayer = gameState.players[gameState.currentTurnPlayerIndex];
-             if (!currentPlayer) { /* ... error handling ... */ return; }
+             if (!currentPlayer) {
+                  console.error(`Current player not found at index ${gameState.currentTurnPlayerIndex}`);
+                  // Attempt to recover or end game
+                  // Find first alive player?
+                  const alivePlayerIndex = gameState.players.findIndex(p => p.isAlive);
+                  if (alivePlayerIndex !== -1) {
+                      gameState.currentTurnPlayerIndex = alivePlayerIndex;
+                      console.log(`Recovered current player index to ${alivePlayerIndex}`);
+                      // Re-call renderGame, but add a safeguard against infinite loops
+                      // renderGame(); // Be cautious with recursive calls
+                  } else {
+                      checkGameOver(); // No one is alive?
+                  }
+                  return; // Stop current render attempt
+             }
+
 
             const playersGrid = document.getElementById('players-grid');
-            playersGrid.innerHTML = ''; 
+            playersGrid.innerHTML = ''; // Clear previous cards
 
-            // Render other alive players
+            // Render other alive player cards
             gameState.players.forEach(player => {
+                // Skip self and defeated players
                 if (player.id === currentPlayer.id || !player.isAlive) return; 
 
                 const playerCard = document.createElement('div');
                 playerCard.id = `player-card-${player.id}`;
-                let cardClasses = 'card p-2 space-y-1 player-card transition-all duration-300 ease-in-out transform hover:scale-105'; 
                 
-                // Highlight states (BLE aim, Item target)
-                if (player.id === selectedTargetId && !gameState.itemTargetSelection) { cardClasses += ' border-4 border-yellow-400 scale-105'; }
-                if (gameState.itemTargetSelection && player.id !== currentPlayer.id) { cardClasses += ' targetable border-blue-400 cursor-pointer hover:border-blue-300'; }
+                let cardClasses = 'card p-2 space-y-1 player-card transition-all duration-300 ease-in-out transform hover:scale-105'; // Added hover effect
+                
+                // Highlight for BLE target aiming (not item targeting)
+                if (player.id === selectedTargetId && !gameState.itemTargetSelection) { 
+                    cardClasses += ' border-4 border-yellow-400 scale-105'; // Make highlight more obvious
+                 }
+                // Highlight for item targeting
+                 if (gameState.itemTargetSelection && player.id !== currentPlayer.id) { // Can target others
+                     cardClasses += ' targetable border-blue-400 cursor-pointer'; // Item target style
+                 }
+
 
                 playerCard.className = cardClasses;
+
                 let statusIconsHTML = '';
-                if (player.isHandcuffed) { statusIconsHTML += `<span class="status-icon text-gray-400 animate-pulse" title="手錠">${ITEMS.handcuffs.svg}</span>`; }
+                if (player.isHandcuffed) {
+                    statusIconsHTML += `<span class="status-icon text-gray-400 animate-pulse" title="手錠">${ITEMS.handcuffs.svg}</span>`; // Added pulse animation
+                }
+                 // Add other status icons here if needed
+
+                playerCard.innerHTML = `
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <h3 class="text-base font-bold truncate">${player.name}</h3>
+                                <div class="flex">${statusIconsHTML}</div>
+                            </div>
+                             <div id="player-hp-${player.id}" class="flex items-center mt-1 hp-star">
+                                 ${generateHpStars(player.hp, player.maxHp)}
+                            </div>
+                        </div>
+                         <!-- Maybe add item count display here? -->
+                         <!-- <span class="text-xs text-gray-400">Items: ${player.items?.length || 0}</span> -->
+                    </div>`;
                 
-                playerCard.innerHTML = `<!-- Player Card Content -->
-                     <div class="flex justify-between items-start">
-                         <div>
-                             <div class="flex items-center gap-2"><h3 class="text-base font-bold truncate">${player.name}</h3><div class="flex">${statusIconsHTML}</div></div>
-                             <div id="player-hp-${player.id}" class="flex items-center mt-1 hp-star">${generateHpStars(player.hp, player.maxHp)}</div>
-                         </div>
-                     </div>`;
+                // Add Shoot button only if it's NOT item targeting mode
+                if (!gameState.itemTargetSelection) {
+                    const shootButton = document.createElement('button');
+                    shootButton.className = 'w-full mt-2 btn btn-danger text-sm p-1 disabled:opacity-50 disabled:cursor-not-allowed';
+                    shootButton.textContent = '撃つ';
+                    shootButton.disabled = gameState.isActionLocked; // Disable based on action lock
+                    shootButton.onclick = (e) => {
+                        e.stopPropagation(); // Prevent card click event
+                        if (!shootButton.disabled) {
+                             // Optional: Visual feedback on click
+                             shootButton.classList.add('scale-95');
+                             setTimeout(() => shootButton.classList.remove('scale-95'), 100);
+                             handleShoot(player.id);
+                         }
+                    };
+                    playerCard.appendChild(shootButton);
+                 }
                 
-                if (!gameState.itemTargetSelection) { /* ... add shoot button ... */ }
-                
-                playerCard.addEventListener('click', () => { /* ... target selection logic ... */ });
+                // Click handler for targeting (both shooting and items)
+                playerCard.addEventListener('click', () => {
+                     if (gameState.isActionLocked) return;
+
+                     if (gameState.itemTargetSelection) {
+                         // Item targeting logic
+                         if (player.id !== currentPlayer.id) { // Cannot use item on self? Adjust if needed
+                             handleTargetSelection(player.id);
+                         } else {
+                              addLog("このアイテムは他のプレイヤーにしか使えません。", "info");
+                              playSfx('select-target'); // Error/selection sound
+                          }
+                     } else {
+                         // Shooting target selection logic
+                         selectTarget(player.id); // Toggles target highlight via selectedTargetId
+                     }
+                 });
+
+
                 playersGrid.appendChild(playerCard);
             });
 
-            // Render current player info (footer)
+            // Render current player info area (footer)
             const myInfoArea = document.getElementById('my-info-area');
             let myCardClasses = 'card p-3 mt-auto flex-shrink-0 transition-all duration-300 ease-in-out';
-            if (currentPlayer.id === selectedTargetId && !gameState.itemTargetSelection) { myCardClasses += ' border-4 border-yellow-400 scale-105'; }
+            
+            // Highlight for BLE target aiming at self
+            if (currentPlayer.id === selectedTargetId && !gameState.itemTargetSelection) {
+                myCardClasses += ' border-4 border-yellow-400 scale-105';
+            }
+             // Highlight for item targeting self (if allowed by item logic)
+            if (gameState.itemTargetSelection /* && item_can_target_self */) {
+                 // myCardClasses += ' targetable border-blue-400 cursor-pointer';
+             }
+
+
             myInfoArea.className = myCardClasses;
-            myInfoArea.onclick = () => { /* ... select self logic ... */ };
+            // Add click handler for selecting self (for shooting)
+            myInfoArea.onclick = () => {
+                 if (!gameState.isActionLocked && !gameState.itemTargetSelection) {
+                     selectTarget(currentPlayer.id);
+                 }
+                 // Add item targeting self logic here if needed
+                 // else if (!gameState.isActionLocked && gameState.itemTargetSelection && item_can_target_self) {
+                 //     handleTargetSelection(currentPlayer.id);
+                 // }
+            };
 
             document.getElementById('my-name').textContent = `${currentPlayer.name} (あなたのターン)`;
             document.getElementById('my-hp-stars').innerHTML = generateHpStars(currentPlayer.hp, currentPlayer.maxHp);
             
+            // Update current player's status icons
             const myStatusIcons = document.getElementById('my-status-icons');
-            myStatusIcons.innerHTML = ''; 
-            if (currentPlayer.isHandcuffed) { /* ... show cuffed (shouldn't happen) ... */ }
-            if (currentPlayer.usedSaw) { myStatusIcons.innerHTML += `<span class="status-icon text-red-500" title="ノコギリ使用中">${ITEMS.saw.svg}</span>`; }
+            myStatusIcons.innerHTML = ''; // Clear previous
+            if (currentPlayer.isHandcuffed) { // Should technically not happen if turn logic is correct
+                myStatusIcons.innerHTML = `<span class="status-icon text-gray-400 animate-pulse" title="手錠">${ITEMS.handcuffs.svg}</span>`;
+            }
+             if (currentPlayer.usedSaw) { // Show saw status
+                 myStatusIcons.innerHTML += `<span class="status-icon text-red-500" title="ノコギリ使用中">${ITEMS.saw.svg}</span>`;
+             }
+            // Add other status icons for current player...
             
-            // Update button disabled states
+            // Enable/disable action buttons globally
             setActionButtonsDisabled(gameState.isActionLocked || !!gameState.itemTargetSelection);
+             // Specifically disable shoot buttons if item targeting
+            document.querySelectorAll('#players-grid button, #shoot-self-btn').forEach(btn => {
+                 if (gameState.itemTargetSelection) {
+                     btn.disabled = true;
+                     btn.classList.add('opacity-50', 'cursor-not-allowed');
+                 } else {
+                     // Re-enable based on general action lock state
+                     btn.disabled = gameState.isActionLocked;
+                      if (btn.disabled) {
+                          btn.classList.add('opacity-50', 'cursor-not-allowed');
+                      } else {
+                          btn.classList.remove('opacity-50', 'cursor-not-allowed');
+                      }
+                 }
+             });
+             // Ensure items button is disabled correctly
+             itemsBtn.disabled = gameState.isActionLocked || !!gameState.itemTargetSelection;
+
+
         }
 
-        function selectTarget(playerId) { /* ... toggle selectedTargetId and render ... */ }
+        function selectTarget(playerId) {
+            if (gameState.isActionLocked) return;
+            
+            // Play sound regardless of toggle state
+             playSfx('select-target'); 
 
-        function setActionButtonsDisabled(state) { /* ... update button disabled props and styles ... */ }
+            // Toggle selection
+            selectedTargetId = (selectedTargetId === playerId) ? null : playerId; 
+            
+            console.log(`ターゲット選択: Player ID ${selectedTargetId}`);
+            renderGame(); // Update UI to reflect highlight changes
+        }
 
-        function generateHpStars(hp, maxHp) { /* ... generate star HTML ... */ }
+        function setActionButtonsDisabled(state) {
+            // General state for non-shooting buttons
+            itemsBtn.disabled = state;
+            // Shoot buttons are handled more specifically in renderGame based on itemTargetSelection
+            document.getElementById('shoot-self-btn').disabled = state || !!gameState.itemTargetSelection;
+            document.querySelectorAll('#players-grid button').forEach(btn => btn.disabled = state || !!gameState.itemTargetSelection);
 
-        function showItemSelectionModal() { /* ... generate and show item modal ... */ }
 
-        async function selectAndUseItem(itemKey) { /* ... close modal and call useItem ... */ }
+            // Add visual cues for disabled state
+             const buttonsToStyle = [itemsBtn, document.getElementById('shoot-self-btn'), ...document.querySelectorAll('#players-grid button')];
+             buttonsToStyle.forEach(btn => {
+                 if (btn) { // Ensure button exists
+                     if (btn.disabled) {
+                         btn.classList.add('opacity-50', 'cursor-not-allowed');
+                     } else {
+                         btn.classList.remove('opacity-50', 'cursor-not-allowed');
+                     }
+                 }
+             });
 
-        async function showShellLoadingModal(liveCount, blankCount) { // Pass counts
+        }
+
+        function generateHpStars(hp, maxHp) {
+            let starsHtml = '';
+            for (let i = 0; i < maxHp; i++) {
+                // Use distinct classes for easier selection/animation
+                const starClass = i < hp ? 'text-yellow-400 filled-star' : 'text-gray-600 empty-star';
+                 starsHtml += `<span class="${starClass}">${STAR_SVG}</span>`;
+            }
+            return `<div class="flex">${starsHtml}</div>`; // Wrap in a div for layout
+        }
+
+        function showItemSelectionModal() {
+            if (gameState.isActionLocked) return;
+            let contentHtml = '<div class="grid grid-cols-3 sm:grid-cols-4 gap-4">'; // Responsive grid
+            
+            // Example: Only show items the player actually has (requires adding items to player state)
+            // const playerItems = gameState.players[gameState.currentTurnPlayerIndex].items || Object.keys(ITEMS); // Default to all if no item state
+            // playerItems.forEach(key => {
+            //    if (ITEMS[key]) { // Check if item exists in master list
+            //        const item = ITEMS[key];
+            //        contentHtml += ...
+            //    }
+            // });
+
+            // Currently shows all items
+            for (const key in ITEMS) {
+                const item = ITEMS[key];
+                contentHtml += `
+                    <div onclick="selectAndUseItem('${key}')" 
+                         class="item-icon transform transition duration-150 ease-in-out hover:scale-110 active:scale-95" 
+                         title="${item.name}">
+                        ${item.svg}
+                        <span class="text-xs mt-1 truncate w-full px-1">${item.name}</span>
+                    </div>
+                `;
+            }
+            contentHtml += '</div>';
+
+            modalTitleUI.textContent = 'アイテムを選択';
+            modalContentUI.innerHTML = contentHtml;
+            modalConfirmBtn.style.display = 'none'; // No OK button needed, click item to use
+            
+            // Adjust modal size for items
+             modalCardUI.classList.add('modal-lg', 'max-w-xl'); // Wider for more items
+
+            modalUI.classList.remove('hidden');
+            modalUI.classList.add('flex');
+            
+            // Close modal by clicking backdrop
+            modalBackdrop.onclick = () => {
+                modalUI.classList.add('hidden');
+                 modalCardUI.classList.remove('modal-lg', 'max-w-xl'); // Reset size
+                 modalBackdrop.onclick = null; // Remove listener
+            };
+        }
+
+        async function selectAndUseItem(itemKey) {
+            // Close the modal first
+            modalUI.classList.add('hidden');
+            modalCardUI.classList.remove('modal-lg', 'max-w-xl'); // Reset size
+             modalBackdrop.onclick = null; // Remove listener
+
+
+             // Add a small delay before processing to ensure modal is hidden visually
+             await new Promise(res => setTimeout(res, 100));
+
+            // Proceed with item logic if game is still active
+            if (gameState.gameState === 'playing' && !gameState.isActionLocked) {
+                 await useItem(itemKey);
+                 // Remove item from player's inventory here if implementing inventory
+                 // Example: removePlayerItem(gameState.currentTurnPlayerIndex, itemKey);
+             }
+
+        }
+
+        async function showShellLoadingModal() {
             return new Promise(async (resolve) => {
                 modalCardUI.classList.add('modal-lg');
                 modalTitleUI.textContent = '弾倉装填';
-                // Use passed counts for accurate display
+                
+                 // Calculate counts for display
+                 const liveCount = gameState.shotgun.chamber.filter(s => s === 'live').length;
+                 const blankCount = gameState.shotgun.chamber.length - liveCount;
+
                 modalContentUI.innerHTML = `
                      <p class="mb-2 text-lg">装填: <span class="text-red-500">${liveCount} 実弾</span>, <span class="text-blue-500">${blankCount} 空砲</span></p>
                      <p id="shell-modal-status" class="mb-4 text-xl">確認してください...</p>
                      <div id="shell-display-modal" class="flex flex-wrap justify-center items-center mt-2 min-h-[80px]"></div>`;
-                
                 modalConfirmBtn.style.display = 'none';
                 modalUI.classList.remove('hidden');
                 modalUI.classList.add('flex');
-                modalBackdrop.onclick = null; 
+                modalBackdrop.onclick = null; // Prevent closing during animation
 
                 const display = document.getElementById('shell-display-modal');
-                const statusText = document.getElementById('shell-modal-status');
-                
-                // --- 重要: ここでは実際のchamberではなく、表示用のコピーを作成 ---
-                // Visual representation uses counts, actual order is irrelevant here
-                const visualShells = Array(liveCount).fill('live').concat(Array(blankCount).fill('blank'))
-                                     .sort((a, b) => a === 'live' ? -1 : 1); // Sort for initial display
+                 const statusText = document.getElementById('shell-modal-status');
+                // Create shells visually (sorted initially)
+                const sortedShellsVisual = [...gameState.shotgun.chamber].sort((a, b) => a === 'live' ? -1 : 1); 
 
-                playSfx('load-shell'); 
+                playSfx('load-shell'); // Play sound once at the beginning
 
                 // Animate shells appearing
-                visualShells.forEach((shellType, i) => {
+                sortedShellsVisual.forEach((shellType, i) => {
                     const block = document.createElement('div');
-                    block.className = `shell-block ${shellType}`; // Start visible with correct color
-                    block.style.width = '35px'; 
+                    block.className = `shell-block ${shellType}`;
+                    block.style.width = '35px'; // Slightly larger in modal
                     block.style.height = '60px';
-                    block.style.animation = `shell-in 0.3s ease-out ${i * 100}ms forwards`; 
-                    block.style.opacity = 0; // Start fully transparent
+                    block.style.animationDelay = `${i * 100}ms`;
+                    block.classList.add('shell-in-anim', 'opacity-0'); // Start invisible
+                     requestAnimationFrame(() => block.classList.remove('opacity-0')); // Fade in
                     display.appendChild(block);
-                     // Force reflow might not be needed if animation handles opacity
-                     // requestAnimationFrame(() => block.style.opacity = 1); 
                 });
 
-                await new Promise(res => setTimeout(res, 3500 + visualShells.length * 100)); // Wait time includes animation
+                // Wait for player to see the counts
+                await new Promise(res => setTimeout(res, 3500)); 
 
                 statusText.textContent = 'シャッフル中...';
                 const shellElements = Array.from(display.children);
 
-                // --- 見た目のシャッフル (実際の順番とは無関係) ---
-                for (let i = 0; i < 5; i++) { 
-                     shellElements.sort(() => Math.random() - 0.5).forEach(el => display.appendChild(el)); 
-                     shellElements.forEach(el => { el.style.transform = `translate(${(Math.random() - 0.5) * 15}px, ${(Math.random() - 0.5) * 5}px) rotate(${(Math.random() -0.5) * 5}deg)`; });
-                    await new Promise(res => setTimeout(res, 120)); 
-                     shellElements.forEach(el => el.style.transform = ''); 
+                // Shuffle animation: Quick visual scramble
+                for (let i = 0; i < 5; i++) { // More shuffles for effect
+                    // Quickly reorder elements in the DOM
+                    shellElements.sort(() => Math.random() - 0.5).forEach(el => display.appendChild(el)); 
+                    // Add slight visual feedback (optional)
+                     shellElements.forEach(el => {
+                         el.style.transform = `translateX(${(Math.random() - 0.5) * 10}px)`;
+                     });
+                    await new Promise(res => setTimeout(res, 150)); // Faster shuffle interval
+                     shellElements.forEach(el => el.style.transform = ''); // Reset transform
                 }
                 
-                // --- ここで実際の弾倉をシャッフル ---
-                 // This is where the actual game state array is randomized
-                 for (let i = gameState.shotgun.chamber.length - 1; i > 0; i--) {
-                     const j = Math.floor(Math.random() * (i + 1));
-                     [gameState.shotgun.chamber[i], gameState.shotgun.chamber[j]] = [gameState.shotgun.chamber[j], gameState.shotgun.chamber[i]];
-                 }
-                 console.log("Actual shuffled chamber (internal):", gameState.shotgun.chamber); 
+                 // Actual chamber shuffle happens logically elsewhere (or ensure it matches here)
+                 // gameState.shotgun.chamber.sort(() => Math.random() - 0.5); // Ensure logical matches visual if needed now
 
-                await new Promise(res => setTimeout(res, 500)); 
+                await new Promise(res => setTimeout(res, 500)); // Pause after shuffle animation
                 
                 statusText.textContent = '装填完了';
-                
-                // --- 徐々に未知の色へ変更 ---
-                 shellElements.forEach((child, i) => {
-                     child.style.transition = 'background-color 0.8s cubic-bezier(0.4, 0, 0.2, 1)'; 
-                     child.style.transitionDelay = `${i * 70}ms`; 
-                 });
-                 requestAnimationFrame(() => { // Ensure styles applied before class change
-                     shellElements.forEach(child => {
+                // Transition shells to unknown state
+                shellElements.forEach((child, i) => {
+                     child.style.transition = 'background-color 0.5s ease-in-out'; // Smooth color change
+                     child.style.transitionDelay = `${i * 50}ms`; // Stagger the change
+                     requestAnimationFrame(() => {
                          child.classList.remove('live', 'blank');
                          child.classList.add('unknown');
                      });
                  });
-                // --- ここまで ---
 
-                await new Promise(res => setTimeout(res, 800 + shellElements.length * 70)); 
+                await new Promise(res => setTimeout(res, 1500 + shellElements.length * 50)); // Wait for color change
 
+                // Close modal
                 modalUI.classList.add('hidden');
                 modalCardUI.classList.remove('modal-lg');
-                modalConfirmBtn.style.display = 'block'; 
+                modalConfirmBtn.style.display = 'block'; // Restore default
                 resolve();
             });
         }
 
-        async function showMagnifyingGlassModal() { /* ... (no changes needed here) ... */ }
-        function addPlayerInput() { /* ... */ }
-        function removePlayerInput() { /* ... */ }
-        function updatePlayerButtons() { /* ... */ }
-        function triggerScreenShake(intensity) { /* ... */ }
-        function triggerVignetteEffect(effectClass) { /* ... */ }
-        function showTurnTransition() { /* ... */ }
-        function showModal(title, content, onConfirm, showCancel = false, onCancel = null) { /* ... */ }
-        function showInfoModal(title, content) { /* ... */ }
+        async function showMagnifyingGlassModal() {
+            return new Promise(resolve => {
+                modalCardUI.classList.add('modal-lg'); // Use larger modal style
+                const nextShell = gameState.shotgun.chamber[0] || 'empty';
+                modalTitleUI.textContent = '虫眼鏡使用';
+                modalContentUI.innerHTML = `
+                     <p class="mb-4 text-xl animate-pulse">次の弾を調べている...</p>
+                     <div id="revealed-shell-container" class="flex justify-center items-center h-32 opacity-0 transition-opacity duration-500 ease-in-out">
+                         <!-- Content added by timeout -->
+                    </div>`;
+                modalConfirmBtn.textContent = "閉じる"; // Set button text
+                modalConfirmBtn.onclick = () => {
+                    modalUI.classList.add('hidden');
+                    modalCardUI.classList.remove('modal-lg');
+                     modalConfirmBtn.textContent = "OK"; // Reset button text
+                     modalBackdrop.onclick = null; // Clean up backdrop listener
+                    resolve();
+                };
+                modalConfirmBtn.style.display = 'none'; // Hide button initially
+                modalUI.classList.remove('hidden');
+                modalUI.classList.add('flex');
+                 // Prevent closing by clicking backdrop while revealing
+                 modalBackdrop.onclick = null;
+
+
+                // Simulate revealing the shell
+                setTimeout(() => {
+                    const container = document.getElementById('revealed-shell-container');
+                     const statusP = modalContentUI.querySelector('p');
+                     if (statusP) statusP.classList.remove('animate-pulse'); // Stop pulsing
+
+                    if (nextShell !== 'empty') {
+                        const shellColor = nextShell === 'live' ? 'text-red-500' : 'text-blue-500';
+                        const shellText = nextShell === 'live' ? '実弾' : '空砲';
+                        container.innerHTML = `
+                            <div class="shell-block ${nextShell}" style="width: 50px; height: 80px; border-width: 3px;"></div>
+                            <p class="ml-4 text-3xl font-bold ${shellColor}">${shellText}</p>
+                        `;
+                         if (statusP) statusP.textContent = '次の弾は...'; // Update status text
+                    } else {
+                        container.innerHTML = `<p class="text-3xl font-bold text-gray-400">弾倉は空だ</p>`;
+                         if (statusP) statusP.textContent = '結果:';
+                    }
+                     // Fade in the result and show the button
+                     container.classList.remove('opacity-0');
+                     modalConfirmBtn.style.display = 'block';
+                      // Allow closing via backdrop now
+                     modalBackdrop.onclick = modalConfirmBtn.onclick;
+
+                }, 1500); // Delay for reveal effect
+            });
+        }
+
+        function addPlayerInput() {
+            const inputs = playerInputsUI.getElementsByTagName('input');
+            if (inputs.length < 4) { // Limit to 4 players
+                const newInput = document.createElement('input');
+                newInput.type = 'text';
+                newInput.placeholder = `プレイヤー${inputs.length + 1}の名前`;
+                newInput.className = 'player-name-input w-full p-2 rounded bg-gray-700 border border-gray-500 focus:outline-none focus:ring-2 focus:ring-red-500';
+                playerInputsUI.appendChild(newInput);
+            }
+            updatePlayerButtons(); // Update button states after adding
+        }
+        function removePlayerInput() {
+            const inputs = playerInputsUI.getElementsByTagName('input');
+            if (inputs.length > 2) { // Minimum 2 players
+                playerInputsUI.removeChild(inputs[inputs.length - 1]);
+            }
+            updatePlayerButtons(); // Update button states after removing
+        }
+        function updatePlayerButtons() {
+            const inputs = playerInputsUI.getElementsByTagName('input');
+            addPlayerBtn.disabled = inputs.length >= 4;
+            removePlayerBtn.disabled = inputs.length <= 2;
+             // Basic validation feedback for start button
+             const playerNames = Array.from(inputs).map(input => input.value.trim()).filter(name => name);
+             startGameBtn.disabled = playerNames.length < 2 || new Set(playerNames).size !== playerNames.length;
+
+        }
+        function triggerScreenShake(intensity) {
+            const className = intensity === 'hard' ? 'shake-hard' : 'shake-soft';
+             const duration = intensity === 'hard' ? 400 : 300;
+            // Play corresponding sound
+            playSfx(intensity === 'hard' ? 'screen-shake-hard' : 'screen-shake-soft');
+            
+            // Apply shake class
+            document.body.classList.remove('shake-hard', 'shake-soft'); // Remove previous first
+            void document.body.offsetWidth; // Force reflow to restart animation
+            document.body.classList.add(className);
+            
+            // Remove class after animation duration
+            setTimeout(() => { document.body.classList.remove(className); }, duration);
+        }
+        function triggerVignetteEffect(effectClass) {
+            const effectEl = document.getElementById('vignette-effect');
+            if (!effectEl) return;
+
+             // Ensure previous effects are removed before adding new one
+             // This assumes effect classes define animations that play once
+             effectEl.classList.remove('blood-splatter'); // Add other effect classes if created
+
+            // Add the new effect class
+            effectEl.classList.add(effectClass);
+            
+            // Remove the class after the animation duration (assuming 500ms from CSS)
+            setTimeout(() => {
+                effectEl.classList.remove(effectClass);
+            }, 500); // Match CSS animation duration
+        }
+
+        function showTurnTransition() {
+             // Ensure valid player index before accessing
+             if (gameState.currentTurnPlayerIndex < 0 || gameState.currentTurnPlayerIndex >= gameState.players.length) {
+                 console.error("Invalid currentTurnPlayerIndex in showTurnTransition:", gameState.currentTurnPlayerIndex);
+                 // Attempt recovery or show error
+                 const aliveIndex = gameState.players.findIndex(p => p.isAlive);
+                 if (aliveIndex !== -1) gameState.currentTurnPlayerIndex = aliveIndex;
+                 else { checkGameOver(); return; } // End if no one alive
+             }
+
+            const currentPlayer = gameState.players[gameState.currentTurnPlayerIndex];
+             if (!currentPlayer) {
+                 console.error("Could not get current player in showTurnTransition.");
+                 return; // Avoid errors if player somehow undefined
+             }
+
+
+            // Action should be locked *before* showing the modal
+             gameState.isActionLocked = true;
+             renderGame(); // Reflect locked state
+
+
+            showModal(
+                 `${currentPlayer.name} のターン`, 
+                 `スマートフォンを ${currentPlayer.name} さんに渡してください。`,
+                 () => { // onConfirm callback
+                     modalUI.classList.add('hidden');
+                     // Unlock actions *after* the modal is confirmed/closed
+                     gameState.isActionLocked = false; 
+                     renderGame(); // Update UI to enable buttons for the current player
+                     addLog(`${currentPlayer.name}のターン開始。`, 'info'); // Log turn start
+                 }
+             );
+        }
+        
+         // Generic Modal Function (reusable)
+        function showModal(title, content, onConfirm, showCancel = false, onCancel = null) {
+            modalTitleUI.textContent = title;
+            modalContentUI.innerHTML = `<div>${content}</div>`; // Use innerHTML cautiously, ensure content is safe
+
+             // Configure Confirm Button
+            modalConfirmBtn.style.display = 'block';
+            modalConfirmBtn.onclick = () => {
+                 if (onConfirm && typeof onConfirm === 'function') {
+                     onConfirm();
+                 } else {
+                     modalUI.classList.add('hidden'); // Default close action
+                 }
+             };
+
+             // Configure Cancel Button (optional)
+             // Example: Create or get a cancel button element
+             const modalCancelBtn = document.getElementById('modal-cancel-btn'); // Assuming you add a cancel button to the HTML
+             if (showCancel && modalCancelBtn) {
+                 modalCancelBtn.style.display = 'inline-block'; // Or 'block' based on layout
+                 modalCancelBtn.onclick = () => {
+                     if (onCancel && typeof onCancel === 'function') {
+                         onCancel();
+                     }
+                     modalUI.classList.add('hidden'); // Always close on cancel
+                 };
+             } else if (modalCancelBtn) {
+                 modalCancelBtn.style.display = 'none';
+             }
+
+
+            modalUI.classList.remove('hidden');
+            modalUI.classList.add('flex');
+            
+            // Prevent closing by clicking backdrop by default for important modals
+            modalBackdrop.onclick = null; 
+        }
+
+        // Simplified Info Modal using the generic one
+        function showInfoModal(title, content) {
+            return new Promise(resolve => {
+                showModal(title, content, () => {
+                    modalUI.classList.add('hidden');
+                    resolve(); // Resolve the promise when OK is clicked
+                });
+                 // Allow closing info modal via backdrop click
+                 modalBackdrop.onclick = modalConfirmBtn.onclick;
+            });
+        }
 
     </script>
 </body>
