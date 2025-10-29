@@ -446,7 +446,9 @@
             }
 
             gameState = {
-                players: playerNames.map((name, index) => ({ id: index, name: name, hp: 4, maxHp: 4, isAlive: true, usedSaw: false, isHandcuffed: false })),
+                // --- ▼▼▼ 修正箇所 1: maxHpを8に変更 ▼▼▼ ---
+                players: playerNames.map((name, index) => ({ id: index, name: name, hp: 4, maxHp: 8, isAlive: true, usedSaw: false, isHandcuffed: false })),
+                // --- ▲▲▲ 修正箇所 End ▲▲▲ ---
                 gameState: 'playing',
                 currentTurnPlayerIndex: 0,
                 shotgun: { chamber: [] },
@@ -654,11 +656,22 @@
                     renderGame();
                     await new Promise(res => setTimeout(res, 500));
                     break;
+
+                // --- ▼▼▼ 修正箇所 4: 手錠の対象存在チェック ▼▼▼ ---
                 case 'handcuffs':
-                    addLog('誰に手錠をかけますか？');
-                    gameState.itemTargetSelection = { itemKey: 'handcuffs' };
-                    unlockAction = false;
+                    const potentialTargets = gameState.players.filter(p => p.isAlive && p.id !== currentPlayer.id);
+                    if (potentialTargets.length > 0) {
+                        addLog('誰に手錠をかけますか？');
+                        gameState.itemTargetSelection = { itemKey: 'handcuffs' };
+                        unlockAction = false; // Action locked until target selected
+                    } else {
+                        addLog('手錠をかけられる相手がいない。', 'info');
+                        await showInfoModal('手錠', '手錠をかけられる相手がいません。');
+                        // unlockAction remains true, action will unlock after switch
+                    }
                     break;
+                // --- ▲▲▲ 修正箇所 End ▲▲▲ ---
+
                 case 'beer':
                     if (gameState.shotgun.chamber.length > 0) {
                         const ejectedShell = gameState.shotgun.chamber.shift();
@@ -671,6 +684,8 @@
                     }
                     renderGame();
                     break;
+
+                // --- ▼▼▼ 修正箇所 2: 薬で死亡時の処理 ▼▼▼ ---
                 case 'expired-medicine':
                     triggerScreenShake('soft');
                     if (Math.random() < 0.5) {
@@ -691,20 +706,21 @@
                         currentPlayer.hp = 0;
                         currentPlayer.isAlive = false;
                         addLog(`${currentPlayer.name}は薬の副作用で倒れた...`, 'damage');
-                        renderGame();
-                        checkGameOver();
-                        unlockAction = false;
+                        unlockAction = false; // アクションをロックしたままにする
+                        renderGame(); // 死亡状態を反映
+                        
+                        // ゲームオーバーでない場合、ターンを終了させる
+                        if (!checkGameOver()) {
+                            setTimeout(() => endTurn(), 1500); // ログが見えるように少し待つ
+                        }
                     }
                     break;
+                // --- ▲▲▲ 修正箇所 End ▲▲▲ ---
                 
-                // --- ▼▼▼ 修正箇所 Start ▼▼▼ ---
                 case 'inverter':
                     if (gameState.shotgun.chamber.length > 0) {
                         const nextShell = gameState.shotgun.chamber[0];
-                        // 弾の種類を反転させる (live ⇔ blank)
                         gameState.shotgun.chamber[0] = (nextShell === 'live') ? 'blank' : 'live';
-                        
-                        // プレイヤーには変更後の種類を伝えない
                         addLog('次の弾の種類を反転させた！', 'action');
                         await showInfoModal('インバーター', '次の弾の種類が反転しました。');
                     } else {
@@ -712,8 +728,6 @@
                         await showInfoModal('インバーター', '弾倉が空です。');
                     }
                     break;
-                // --- ▲▲▲ 修正箇所 End ▲▲▲ ---
-
                 case 'disposable-phone':
                     if (gameState.shotgun.chamber.length > 0) {
                         const randomIndex = Math.floor(Math.random() * gameState.shotgun.chamber.length);
@@ -736,6 +750,22 @@
                     await showInfoModal('不明なアイテム', 'このアイテムの効果は不明です。');
                     break;
             }
+
+            // --- ▼▼▼ 修正箇所 3: ビールで弾倉が空になった際の処理 ▼▼▼ ---
+            if (itemKey === 'beer' && gameState.shotgun.chamber.length === 0 && gameState.gameState === 'playing') {
+                addLog('弾倉が空になった。新しいラウンドを開始します。', 'info');
+                unlockAction = false; // プレイヤーが他のアクションをできないようにする
+                setTimeout(() => {
+                    // 次のラウンドの開始プレイヤーを決定
+                    let nextPlayerIndex = (gameState.currentTurnPlayerIndex + 1) % gameState.players.length;
+                    while (!gameState.players[nextPlayerIndex].isAlive) {
+                        nextPlayerIndex = (nextPlayerIndex + 1) % gameState.players.length;
+                    }
+                    gameState.currentTurnPlayerIndex = nextPlayerIndex;
+                    startRound();
+                }, 2000); // メッセージが見えるように少し待つ
+            }
+            // --- ▲▲▲ 修正箇所 End ▲▲▲ ---
             
             if (unlockAction && gameState.gameState === 'playing') {
                 gameState.isActionLocked = false;
