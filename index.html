@@ -701,15 +701,12 @@
                 case 'inverter':
                     if (gameState.shotgun.chamber.length > 0) {
                         const nextShell = gameState.shotgun.chamber[0];
-                        if (nextShell === 'live') {
-                            gameState.shotgun.chamber[0] = 'blank';
-                            addLog('次の実弾を空砲に変えた！', 'action');
-                            await showInfoModal('インバーター', '次の弾が <span class="text-blue-500">空砲</span> になりました。');
-                        } else { // 'blank'の場合
-                            gameState.shotgun.chamber[0] = 'live';
-                            addLog('次の空砲を実弾に変えた！', 'action');
-                            await showInfoModal('インバーター', '次の弾が <span class="text-red-500">実弾</span> になりました。');
-                        }
+                        // 弾の種類を反転させる (live ⇔ blank)
+                        gameState.shotgun.chamber[0] = (nextShell === 'live') ? 'blank' : 'live';
+                        
+                        // プレイヤーには変更後の種類を伝えない
+                        addLog('次の弾の種類を反転させた！', 'action');
+                        await showInfoModal('インバーター', '次の弾の種類が反転しました。');
                     } else {
                         addLog('弾倉が空でインバーターは使えなかった。', 'info');
                         await showInfoModal('インバーター', '弾倉が空です。');
