@@ -240,13 +240,13 @@
         const SOUND_EFFECTS = {
             'main-bgm': 'sounds/main-bgm.mp3',
             'shoot-live': 'sounds/shoot-live.mp3',      
-            'shoot-blank': 'sounds/shoot-blank.mp3',    
-            'load-shell': 'sounds/load-shell.mp3',      
-            'pump-action': 'sounds/pump-action.mp3',    
+            'shoot-blank': 'sounds/shoot-blank.mp3',   
+            'load-shell': 'sounds/load-shell.mp3',     
+            'pump-action': 'sounds/pump-action.mp3',   
             'select-target': 'sounds/select-target.mp3', 
-            'use-saw': 'sounds/use-saw.mp3',             
-            'use-cuffs': 'sounds/use-cuffs.mp3',         
-            'use-beer': 'sounds/use-beer.mp3',           
+            'use-saw': 'sounds/use-saw.mp3',            
+            'use-cuffs': 'sounds/use-cuffs.mp3',        
+            'use-beer': 'sounds/use-beer.mp3',          
             'use-item-generic': 'sounds/use-item-generic.mp3',
             'screen-shake-hard': 'sounds/screen-shake-hard.mp3',
             'screen-shake-soft': 'sounds/screen-shake-soft.mp3',
@@ -446,8 +446,8 @@
             }
 
             gameState = {
-                // --- ▼▼▼ 修正箇所 1: maxHpを8に変更 ▼▼▼ ---
-                players: playerNames.map((name, index) => ({ id: index, name: name, hp: 4, maxHp: 8, isAlive: true, usedSaw: false, isHandcuffed: false })),
+                // --- ▼▼▼ 修正箇所 1: maxHpを5、hpを4に変更 ▼▼▼ ---
+                players: playerNames.map((name, index) => ({ id: index, name: name, hp: 4, maxHp: 5, isAlive: true, usedSaw: false, isHandcuffed: false })),
                 // --- ▲▲▲ 修正箇所 End ▲▲▲ ---
                 gameState: 'playing',
                 currentTurnPlayerIndex: 0,
@@ -729,7 +729,7 @@
                     }
                     break;
                 case 'disposable-phone':
-                    if (gameState.shotgun.chamber.length > 0) {
+                    if (gameState.shotgun.chamber.length > 0) { // Changed condition to > 0
                         const randomIndex = Math.floor(Math.random() * gameState.shotgun.chamber.length);
                         const randomShell = gameState.shotgun.chamber[randomIndex];
                         const shellText = randomShell === 'live' ? `<span class="text-red-500">実弾</span>` : `<span class="text-blue-500">空砲</span>`;
@@ -776,7 +776,9 @@
         }
         
         function handleTargetSelection(targetPlayerId) {
-            if (!gameState.itemTargetSelection || gameState.isActionLocked) return;
+             // --- ▼▼▼ 修正箇所: 手錠バグ修正 (isActionLocked チェックを削除) ▼▼▼ ---
+            if (!gameState.itemTargetSelection) return;
+             // --- ▲▲▲ 修正箇所 End ▲▲▲ ---
             gameState.isActionLocked = true;
 
             const { itemKey } = gameState.itemTargetSelection;
@@ -835,8 +837,7 @@
             if (!currentPlayer) {
                 const alivePlayerIndex = gameState.players.findIndex(p => p.isAlive);
                 if (alivePlayerIndex !== -1) gameState.currentTurnPlayerIndex = alivePlayerIndex;
-                else checkGameOver();
-                return;
+                else { checkGameOver(); return; }
             }
 
             const playersGrid = document.getElementById('players-grid');
