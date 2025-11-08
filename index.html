@@ -240,9 +240,9 @@
         const SOUND_EFFECTS = {
             'main-bgm': 'sounds/main-bgm.mp3',
             'shoot-live': 'sounds/shoot-live.mp3',      
-            'shoot-blank': 'sounds/shoot-blank.mp3',   
-            'load-shell': 'sounds/load-shell.mp3',     
-            'pump-action': 'sounds/pump-action.mp3',   
+            'shoot-blank': 'sounds/shoot-blank.mp3',    
+            'load-shell': 'sounds/load-shell.mp3',      
+            'pump-action': 'sounds/pump-action.mp3',    
             'select-target': 'sounds/select-target.mp3', 
             'use-saw': 'sounds/use-saw.mp3',            
             'use-cuffs': 'sounds/use-cuffs.mp3',        
@@ -876,15 +876,25 @@
                     playerCard.appendChild(shootButton);
                 }
                 
+                // --- ▼▼▼ バグ修正箇所 ▼▼▼ ---
+                // クリックイベントのロジックを変更
                 playerCard.addEventListener('click', () => {
-                    if (gameState.isActionLocked) return;
                     if (gameState.itemTargetSelection) {
-                        if (player.id !== currentPlayer.id) handleTargetSelection(player.id);
-                        else addLog("このアイテムは他のプレイヤーにしか使えません。", "info");
+                        // アイテムターゲット選択中は、isActionLockedに関わらず選択処理を実行
+                        if (player.id !== currentPlayer.id) {
+                            handleTargetSelection(player.id);
+                        } else {
+                            addLog("このアイテムは他のプレイヤーにしか使えません。", "info");
+                        }
+                    } else if (gameState.isActionLocked) {
+                        // ターゲット選択中でなく、アクションがロックされている場合は何もしない
+                        return;
                     } else {
+                        // 通常のターゲット選択
                         selectTarget(player.id);
                     }
                 });
+                // --- ▲▲▲ バグ修正箇所 End ▲▲▲ ---
                 playersGrid.appendChild(playerCard);
             });
 
