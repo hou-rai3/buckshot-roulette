@@ -427,6 +427,7 @@
         }
 
         function startGame() {
+            // --- ▼▼▼ エラー修正: playerNames の定義とバリデーションを追加 ▼▼▼ ---
             const playerInputs = document.querySelectorAll('.player-name-input');
             const playerNames = Array.from(playerInputs).map(input => input.value.trim()).filter(name => name);
             if (playerNames.length < 2) { lobbyErrorUI.textContent = '少なくとも2人のプレイヤー名を入力してください。'; return; }
@@ -444,6 +445,7 @@
                     }, { once: true });
                 });
             }
+            // --- ▲▲▲ エラー修正 End ▲▲▲ ---
 
             gameState = {
                 // --- ▼▼▼ 修正箇所 1: maxHpを5、hpを4に変更 ▼▼▼ ---
@@ -451,10 +453,11 @@
                 // --- ▲▲▲ 修正箇所 End ▲▲▲ ---
                 gameState: 'playing',
                 currentTurnPlayerIndex: 0,
-                shotgun: { chamber: [] },
+                shotgun: { chamber: [], originalChamber: [], firedCount: 0 }, // <-- 変更
                 itemTargetSelection: null,
                 roundNumber: 0,
                 isActionLocked: false,
+                lastPhoneAbsoluteIndex: -1, // <-- 変更 (lastPhoneIndex -> lastPhoneAbsoluteIndex)
             };
             
             gameLogUI.innerHTML = '';
@@ -480,8 +483,17 @@
             }
 
             addLog(`ラウンド ${gameState.roundNumber}: ${liveRounds}実弾, ${blankRounds}空砲 装填完了。`, 'info');
-            gameState.shotgun = { chamber };
+            
+            // --- ▼▼▼ 携帯電話バグ修正のための変更 ▼▼▼ ---
+            gameState.shotgun = { 
+                chamber: chamber, 
+                originalChamber: [...chamber], // ラウンド開始時の並びをコピー
+                firedCount: 0 
+            };
             gameState.players.forEach(p => { p.usedSaw = false; }); 
+            gameState.lastPhoneAbsoluteIndex = -1; // <-- ラウンド開始時にリセット
+            // --- ▲▲▲ 変更 End ▲▲▲ ---
+
             displayAndScrambleShells();
         }
 
@@ -511,6 +523,10 @@
             }
 
             const shell = gameState.shotgun.chamber.shift();
+            gameState.shotgun.firedCount++; // <-- 発射カウントを増やす
+            // if (gameState.lastPhoneIndex >= 0) { // <-- 削除
+            //     gameState.lastPhoneIndex--;
+            // }
             const isLive = shell === 'live';
             
             addLog(`${currentPlayer.name}が${targetPlayer.name}を撃った...`);
@@ -675,6 +691,10 @@
                 case 'beer':
                     if (gameState.shotgun.chamber.length > 0) {
                         const ejectedShell = gameState.shotgun.chamber.shift();
+                        gameState.shotgun.firedCount++; // <-- 発射カウントを増やす
+                        // if (gameState.lastPhoneIndex >= 0) { // <-- 削除
+                        //     gameState.lastPhoneIndex--;
+                        // }
                         const shellText = ejectedShell === 'live' ? '実弾' : '空砲';
                         addLog(`ビールを飲んで弾を1つ排出した... (${shellText})`, 'action');
                         await showInfoModal('ビール使用', `弾を1つ排出した... (${shellText})`);
@@ -715,6 +735,7 @@
                         }
                     }
                     break;
+                
                 // --- ▲▲▲ 修正箇所 End ▲▲▲ ---
                 
                 case 'inverter':
@@ -729,17 +750,40 @@
                     }
                     break;
                 case 'disposable-phone':
-                    if (gameState.shotgun.chamber.length > 0) { // Changed condition to > 0
-                        const randomIndex = Math.floor(Math.random() * gameState.shotgun.chamber.length);
-                        const randomShell = gameState.shotgun.chamber[randomIndex];
+                    // --- ▼▼▼ 携帯電話ロジック大幅変更 ▼▼▼ ---
+                    const totalOriginalShells = gameState.shotgun.originalChamber.length;
+                    const firedCount = gameState.shotgun.firedCount;
+                    const remainingShellsCount = totalOriginalShells - firedCount;
+
+                    if (remainingShellsCount > 0) {
+                        let randomRemainingIndex; // 0 から (残り弾数 - 1) までのインデックス
+                        let absoluteIndex; // 絶対位置 (0 から (全弾数 - 1))
+                        
+                        if (remainingShellsCount <= 1) {
+                            randomRemainingIndex = 0;
+                            absoluteIndex = firedCount + randomRemainingIndex;
+                        } else {
+                            // 直前と同じ絶対インデックスが選ばれたら、選び直す
+                            do {
+                                randomRemainingIndex = Math.floor(Math.random() * remainingShellsCount);
+                                absoluteIndex = firedCount + randomRemainingIndex;
+                            } while (absoluteIndex === gameState.lastPhoneAbsoluteIndex);
+                        }
+                        
+                        gameState.lastPhoneAbsoluteIndex = absoluteIndex; // 今回選ばれた絶対インデックスを記憶
+
+                        const randomShell = gameState.shotgun.originalChamber[absoluteIndex];
                         const shellText = randomShell === 'live' ? `<span class="text-red-500">実弾</span>` : `<span class="text-blue-500">空砲</span>`;
-                        let noisyText = `[雑音]...${randomIndex + 1}番目...[雑音]...タイプ: ${shellText}...[切断]`;
-                        addLog(`電話で${randomIndex + 1}番目の弾の種類を確認した... (${randomShell})`, 'action');
+                        // モーダルには (絶対インデックス + 1) を表示
+                        let noisyText = `[雑音]...${absoluteIndex + 1}番目...[雑音]...タイプ: ${shellText}...[切断]`;
+                        
+                        // addLog(`電話で${absoluteIndex + 1}番目の弾の種類を確認した... (${randomShell})`, 'action'); // <-- ログ削除済み
                         await showInfoModal('使い捨て携帯', noisyText);
                     } else {
                         addLog('電話を使おうとしたが、弾倉は空だった。', 'info');
                         await showInfoModal('使い捨て携帯', '弾倉は空だった。');
                     }
+                    // --- ▲▲▲ 携帯電話ロジック変更 End ▲▲▲ ---
                     break;
                 case 'adrenaline':
                     addLog('アドレナリンを使用！ (効果実装中)', 'action');
